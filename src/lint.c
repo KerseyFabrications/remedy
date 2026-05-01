@@ -252,12 +252,6 @@ static void check_raw_text(const char *text, size_t text_len, lint_results_t *re
 
     for (size_t i = 0; i < text_len; i++) {
         if (text[i] == '\n') {
-            if (line_len > 200) {
-                char msg[128];
-                snprintf(msg, sizeof(msg), "Line exceeds 200 characters (%d)", line_len);
-                lint_add(results, LINT_WARNING, line, msg);
-            }
-
             if (line_len > 0 && (text[i - 1] == ' ' || text[i - 1] == '\t')) {
                 lint_add(results, LINT_WARNING, line, "Trailing whitespace");
             }
