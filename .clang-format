@@ -1,0 +1,91 @@
+---
+
+BasedOnStyle: LLVM
+IndentWidth: 4
+
+---
+
+Language: Cpp
+
+#----------------
+# The following four parameters may be interesting to adjust 
+# once line lengths are reduced.
+
+AlignConsecutiveDeclarations: None
+#AlignConsecutiveDeclarations: Consecutive
+
+#AlignConsecutiveMacros: AcrossEmptyLinesAndComments
+AlignConsecutiveMacros: AcrossEmptyLines
+
+AlignConsecutiveAssignments: Consecutive
+#AlignConsecutiveAssignments: None
+
+# Our target column width is 80 characters, but we have very long 
+# end-of-line comments in some files (e.g. board.h) that will
+# require manual correction.
+# ColumnLimit: 80
+ColumnLimit: 140
+#----------------
+
+# Force pointers to the type for C++.
+DerivePointerAlignment: false
+PointerAlignment: Right
+AlignConsecutiveBitFields: None
+AlignEscapedNewlines: Left
+AlignOperands: AlignAfterOperator
+AlignTrailingComments: true
+AllowAllArgumentsOnNextLine: False
+AllowAllParametersOfDeclarationOnNextLine: False
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: False
+AllowShortEnumsOnASingleLine: False
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: False
+BinPackArguments: False
+BinPackParameters: False
+BitFieldColonSpacing: Both
+BreakBeforeBraces: Linux
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: true
+BreakStringLiterals: True
+ContinuationIndentWidth: 4
+IncludeBlocks: Regroup
+IndentCaseBlocks: False
+IndentCaseLabels: True
+IndentExternBlock: NoIndent
+IndentGotoLabels: False
+IndentPPDirectives: None
+InsertTrailingCommas: None
+KeepEmptyLinesAtTheStartOfBlocks: False
+MaxEmptyLinesToKeep: 1
+QualifierAlignment: Custom 
+QualifierOrder: ['inline', 'static', 'const', 'type', 'volatile']
+ReferenceAlignment: Right
+ReflowComments: True
+RemoveBracesLLVM: False
+SeparateDefinitionBlocks: Always
+SpaceAfterCStyleCast: True
+SpaceAfterLogicalNot: False
+SpaceAroundPointerQualifiers: Both
+SpaceBeforeAssignmentOperators: True
+SpaceBeforeCaseColon: False
+SpaceBeforeCpp11BracedList: True
+SpaceBeforeCtorInitializerColon: True
+SpaceBeforeInheritanceColon: True
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: False
+SpaceBeforeSquareBrackets: False
+SpaceInEmptyBlock: True
+SpaceInEmptyParentheses: False
+SpacesInCStyleCastParentheses: False
+SpacesInConditionalStatement: False
+SpacesInContainerLiterals: True
+SpacesInLineCommentPrefix:
+    Minimum: 1
+    Maximum: -1
+SpacesInParentheses: False
+SpacesInSquareBrackets: False
+TabWidth: 4
+UseTab: Never
+

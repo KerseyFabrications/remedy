@@ -1,0 +1,444 @@
+/*
+ * remedy - A full-featured markdown pager for modern Linux terminals
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+#include "syntax_highlight.h"
+
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    const char *name;
+    const char **keywords;
+    const char **types;
+    const char *line_comment;
+    const char *block_comment_start;
+    const char *block_comment_end;
+    bool has_preproc;
+    char string_chars[4];
+} language_def_t;
+
+/* clang-format off */
+static const char *c_keywords[] = {
+    "auto", "break", "case", "const", "continue", "default", "do", "else",
+    "enum", "extern", "for", "goto", "if", "inline", "register", "restrict",
+    "return", "sizeof", "static", "struct", "switch", "typedef", "union",
+    "volatile", "while", NULL
+};
+
+static const char *c_types[] = {
+    "bool", "char", "double", "float", "int", "long", "short", "signed",
+    "unsigned", "void", "int8_t", "int16_t", "int32_t", "int64_t",
+    "uint8_t", "uint16_t", "uint32_t", "uint64_t", "size_t", "ssize_t",
+    "ptrdiff_t", "FILE", "NULL", "true", "false", NULL
+};
+
+static const char *py_keywords[] = {
+    "and", "as", "assert", "async", "await", "break", "class", "continue",
+    "def", "del", "elif", "else", "except", "finally", "for", "from",
+    "global", "if", "import", "in", "is", "lambda", "nonlocal", "not",
+    "or", "pass", "raise", "return", "try", "while", "with", "yield", NULL
+};
+
+static const char *py_types[] = {
+    "True", "False", "None", "int", "float", "str", "list", "dict",
+    "tuple", "set", "bool", "bytes", "type", "object", "self", NULL
+};
+
+static const char *js_keywords[] = {
+    "async", "await", "break", "case", "catch", "class", "const",
+    "continue", "debugger", "default", "delete", "do", "else", "export",
+    "extends", "finally", "for", "function", "if", "import", "in",
+    "instanceof", "let", "new", "of", "return", "static", "super",
+    "switch", "this", "throw", "try", "typeof", "var", "void", "while",
+    "with", "yield", NULL
+};
+
+static const char *js_types[] = {
+    "true", "false", "null", "undefined", "NaN", "Infinity",
+    "Array", "Object", "String", "Number", "Boolean", "Promise",
+    "Map", "Set", "Symbol", NULL
+};
+
+static const char *rust_keywords[] = {
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn",
+    "else", "enum", "extern", "fn", "for", "if", "impl", "in", "let",
+    "loop", "match", "mod", "move", "mut", "pub", "ref", "return", "self",
+    "static", "struct", "super", "trait", "type", "unsafe", "use", "where",
+    "while", NULL
+};
+
+static const char *rust_types[] = {
+    "bool", "char", "f32", "f64", "i8", "i16", "i32", "i64", "i128",
+    "isize", "str", "u8", "u16", "u32", "u64", "u128", "usize",
+    "String", "Vec", "Option", "Result", "Box", "Rc", "Arc",
+    "Some", "None", "Ok", "Err", "true", "false", "Self", NULL
+};
+
+static const char *go_keywords[] = {
+    "break", "case", "chan", "const", "continue", "default", "defer",
+    "else", "fallthrough", "for", "func", "go", "goto", "if", "import",
+    "interface", "map", "package", "range", "return", "select", "struct",
+    "switch", "type", "var", NULL
+};
+
+static const char *go_types[] = {
+    "bool", "byte", "complex64", "complex128", "error", "float32",
+    "float64", "int", "int8", "int16", "int32", "int64", "rune",
+    "string", "uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
+    "true", "false", "nil", "iota", "append", "cap", "close", "copy",
+    "delete", "len", "make", "new", "panic", "print", "println",
+    "recover", NULL
+};
+
+static const char *sh_keywords[] = {
+    "if", "then", "else", "elif", "fi", "for", "while", "do", "done",
+    "case", "esac", "in", "function", "select", "until", "return",
+    "break", "continue", "local", "export", "readonly", "declare",
+    "typeset", "source", "exit", "exec", "eval", "shift", "trap",
+    "set", "unset", NULL
+};
+
+static const char *sh_types[] = {
+    "true", "false", NULL
+};
+
+static const char *cpp_keywords[] = {
+    "alignas", "alignof", "auto", "break", "case", "catch", "class",
+    "const", "constexpr", "const_cast", "continue", "decltype", "default",
+    "delete", "do", "dynamic_cast", "else", "enum", "explicit", "export",
+    "extern", "for", "friend", "goto", "if", "inline", "mutable",
+    "namespace", "new", "noexcept", "operator", "override", "private",
+    "protected", "public", "register", "reinterpret_cast", "return",
+    "sizeof", "static", "static_assert", "static_cast", "struct",
+    "switch", "template", "this", "throw", "try", "typedef", "typeid",
+    "typename", "union", "using", "virtual", "volatile", "while", NULL
+};
+
+static const char *java_keywords[] = {
+    "abstract", "assert", "break", "case", "catch", "class", "const",
+    "continue", "default", "do", "else", "enum", "extends", "final",
+    "finally", "for", "goto", "if", "implements", "import", "instanceof",
+    "interface", "native", "new", "package", "private", "protected",
+    "public", "return", "static", "strictfp", "super", "switch",
+    "synchronized", "this", "throw", "throws", "transient", "try",
+    "volatile", "while", NULL
+};
+
+static const char *java_types[] = {
+    "boolean", "byte", "char", "double", "float", "int", "long", "short",
+    "void", "String", "Integer", "Boolean", "Object", "List", "Map",
+    "Set", "ArrayList", "HashMap", "true", "false", "null", NULL
+};
+/* clang-format on */
+
+static const language_def_t languages[] = {
+    {"c", c_keywords, c_types, "//", "/*", "*/", true, "\"'"},
+    {"h", c_keywords, c_types, "//", "/*", "*/", true, "\"'"},
+    {"cpp", cpp_keywords, c_types, "//", "/*", "*/", true, "\"'"},
+    {"c++", cpp_keywords, c_types, "//", "/*", "*/", true, "\"'"},
+    {"cc", cpp_keywords, c_types, "//", "/*", "*/", true, "\"'"},
+    {"cxx", cpp_keywords, c_types, "//", "/*", "*/", true, "\"'"},
+    {"hpp", cpp_keywords, c_types, "//", "/*", "*/", true, "\"'"},
+    {"java", java_keywords, java_types, "//", "/*", "*/", false, "\"'"},
+    {"python", py_keywords, py_types, "#", NULL, NULL, false, "\"'"},
+    {"py", py_keywords, py_types, "#", NULL, NULL, false, "\"'"},
+    {"javascript", js_keywords, js_types, "//", "/*", "*/", false, "\"'`"},
+    {"js", js_keywords, js_types, "//", "/*", "*/", false, "\"'`"},
+    {"typescript", js_keywords, js_types, "//", "/*", "*/", false, "\"'`"},
+    {"ts", js_keywords, js_types, "//", "/*", "*/", false, "\"'`"},
+    {"rust", rust_keywords, rust_types, "//", "/*", "*/", false, "\"'"},
+    {"rs", rust_keywords, rust_types, "//", "/*", "*/", false, "\"'"},
+    {"go", go_keywords, go_types, "//", "/*", "*/", false, "\"'`"},
+    {"golang", go_keywords, go_types, "//", "/*", "*/", false, "\"'`"},
+    {"bash", sh_keywords, sh_types, "#", NULL, NULL, false, "\"'"},
+    {"sh", sh_keywords, sh_types, "#", NULL, NULL, false, "\"'"},
+    {"shell", sh_keywords, sh_types, "#", NULL, NULL, false, "\"'"},
+    {"zsh", sh_keywords, sh_types, "#", NULL, NULL, false, "\"'"},
+    {NULL, NULL, NULL, NULL, NULL, NULL, false, ""},
+};
+
+static const language_def_t *find_language(const char *name)
+{
+    if (!name || !name[0]) {
+        return NULL;
+    }
+
+    for (int i = 0; languages[i].name; i++) {
+        if (strcasecmp(languages[i].name, name) == 0) {
+            return &languages[i];
+        }
+    }
+
+    return NULL;
+}
+
+static bool is_word_char(char c)
+{
+    return isalnum((unsigned char) c) || c == '_';
+}
+
+static bool word_in_list(const char *word, size_t len, const char **list)
+{
+    if (!list) {
+        return false;
+    }
+
+    for (int i = 0; list[i]; i++) {
+        if (strlen(list[i]) == len && strncmp(list[i], word, len) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+typedef enum {
+    TOKEN_NORMAL,
+    TOKEN_KEYWORD,
+    TOKEN_TYPE,
+    TOKEN_STRING,
+    TOKEN_COMMENT,
+    TOKEN_NUMBER,
+    TOKEN_PREPROC,
+} token_type_t;
+
+static color_id_t token_color(token_type_t type)
+{
+    switch (type) {
+        case TOKEN_KEYWORD:
+            return COLOR_SYN_KEYWORD;
+        case TOKEN_TYPE:
+            return COLOR_SYN_TYPE;
+        case TOKEN_STRING:
+            return COLOR_SYN_STRING;
+        case TOKEN_COMMENT:
+            return COLOR_SYN_COMMENT;
+        case TOKEN_NUMBER:
+            return COLOR_SYN_NUMBER;
+        case TOKEN_PREPROC:
+            return COLOR_SYN_PREPROC;
+        default:
+            return COLOR_CODE_BLOCK;
+    }
+}
+
+static void emit_token(rendered_line_t *line, const char *text, size_t len, token_type_t type)
+{
+    if (len == 0) {
+        return;
+    }
+
+    char *token_text = strndup(text, len);
+    if (!token_text) {
+        return;
+    }
+
+    style_flags_t style = STYLE_CODE;
+    if (type == TOKEN_KEYWORD) {
+        style |= STYLE_BOLD;
+    }
+
+    styled_span_t span = styled_span_create(token_text, style, token_color(type));
+    rendered_line_append_span(line, &span);
+    free(token_text);
+}
+
+static void
+highlight_line(const char *line_text, size_t line_len, const language_def_t *lang, bool *in_block_comment, int indent, line_buffer_t *buf)
+{
+    rendered_line_t *rline = line_buffer_append_line(buf);
+    if (!rline) {
+        return;
+    }
+    rline->indent = indent;
+
+    size_t i = 0;
+
+    /* Continue block comment from previous line */
+    if (*in_block_comment && lang->block_comment_end) {
+        const char *end = strstr(line_text, lang->block_comment_end);
+        if (end) {
+            size_t comment_len = (size_t) (end - line_text) + strlen(lang->block_comment_end);
+            emit_token(rline, line_text, comment_len, TOKEN_COMMENT);
+            i                 = comment_len;
+            *in_block_comment = false;
+        } else {
+            emit_token(rline, line_text, line_len, TOKEN_COMMENT);
+            return;
+        }
+    }
+
+    size_t normal_start = i;
+
+    while (i < line_len) {
+        /* Preprocessor directives */
+        if (lang->has_preproc && line_text[i] == '#' && i == 0) {
+            if (normal_start < i) {
+                emit_token(rline, line_text + normal_start, i - normal_start, TOKEN_NORMAL);
+            }
+            emit_token(rline, line_text + i, line_len - i, TOKEN_PREPROC);
+            return;
+        }
+
+        /* Line comments */
+        if (lang->line_comment && strncmp(line_text + i, lang->line_comment, strlen(lang->line_comment)) == 0) {
+            if (normal_start < i) {
+                emit_token(rline, line_text + normal_start, i - normal_start, TOKEN_NORMAL);
+            }
+            emit_token(rline, line_text + i, line_len - i, TOKEN_COMMENT);
+            return;
+        }
+
+        /* Block comments */
+        if (lang->block_comment_start && strncmp(line_text + i, lang->block_comment_start, strlen(lang->block_comment_start)) == 0) {
+            if (normal_start < i) {
+                emit_token(rline, line_text + normal_start, i - normal_start, TOKEN_NORMAL);
+            }
+
+            const char *end = strstr(line_text + i + strlen(lang->block_comment_start), lang->block_comment_end);
+            if (end) {
+                size_t comment_len = (size_t) (end - (line_text + i)) + strlen(lang->block_comment_end);
+                emit_token(rline, line_text + i, comment_len, TOKEN_COMMENT);
+                i            = i + comment_len;
+                normal_start = i;
+                continue;
+            } else {
+                emit_token(rline, line_text + i, line_len - i, TOKEN_COMMENT);
+                *in_block_comment = true;
+                return;
+            }
+        }
+
+        /* Strings */
+        if (strchr(lang->string_chars, line_text[i])) {
+            if (normal_start < i) {
+                emit_token(rline, line_text + normal_start, i - normal_start, TOKEN_NORMAL);
+            }
+
+            char quote       = line_text[i];
+            size_t str_start = i;
+            i++;
+
+            while (i < line_len) {
+                if (line_text[i] == '\\' && i + 1 < line_len) {
+                    i += 2;
+                } else if (line_text[i] == quote) {
+                    i++;
+                    break;
+                } else {
+                    i++;
+                }
+            }
+
+            emit_token(rline, line_text + str_start, i - str_start, TOKEN_STRING);
+            normal_start = i;
+            continue;
+        }
+
+        /* Numbers */
+        if (isdigit((unsigned char) line_text[i]) && (i == 0 || !is_word_char(line_text[i - 1]))) {
+            if (normal_start < i) {
+                emit_token(rline, line_text + normal_start, i - normal_start, TOKEN_NORMAL);
+            }
+
+            size_t num_start = i;
+
+            /* Hex prefix */
+            if (line_text[i] == '0' && i + 1 < line_len && (line_text[i + 1] == 'x' || line_text[i + 1] == 'X')) {
+                i += 2;
+                while (i < line_len && isxdigit((unsigned char) line_text[i])) {
+                    i++;
+                }
+            } else {
+                while (i < line_len && (isdigit((unsigned char) line_text[i]) || line_text[i] == '.')) {
+                    i++;
+                }
+            }
+
+            /* Suffixes like UL, f, etc. */
+            while (i < line_len && isalpha((unsigned char) line_text[i])) {
+                i++;
+            }
+
+            emit_token(rline, line_text + num_start, i - num_start, TOKEN_NUMBER);
+            normal_start = i;
+            continue;
+        }
+
+        /* Words (keywords, types, or normal) */
+        if (is_word_char(line_text[i]) && (i == 0 || !is_word_char(line_text[i - 1]))) {
+            if (normal_start < i) {
+                emit_token(rline, line_text + normal_start, i - normal_start, TOKEN_NORMAL);
+            }
+
+            size_t word_start = i;
+            while (i < line_len && is_word_char(line_text[i])) {
+                i++;
+            }
+
+            size_t word_len = i - word_start;
+
+            if (word_in_list(line_text + word_start, word_len, lang->keywords)) {
+                emit_token(rline, line_text + word_start, word_len, TOKEN_KEYWORD);
+            } else if (word_in_list(line_text + word_start, word_len, lang->types)) {
+                emit_token(rline, line_text + word_start, word_len, TOKEN_TYPE);
+            } else {
+                emit_token(rline, line_text + word_start, word_len, TOKEN_NORMAL);
+            }
+
+            normal_start = i;
+            continue;
+        }
+
+        i++;
+    }
+
+    if (normal_start < line_len) {
+        emit_token(rline, line_text + normal_start, line_len - normal_start, TOKEN_NORMAL);
+    }
+}
+
+int syntax_highlight_render(const char *code, const char *language, int indent, line_buffer_t *buf)
+{
+    if (!code || !buf) {
+        return FAILURE;
+    }
+
+    const language_def_t *lang = find_language(language);
+
+    bool in_block_comment  = false;
+    const char *line_start = code;
+
+    while (*line_start) {
+        const char *line_end = strchr(line_start, '\n');
+        if (!line_end) {
+            line_end = line_start + strlen(line_start);
+        }
+
+        size_t line_len = (size_t) (line_end - line_start);
+
+        if (lang) {
+            highlight_line(line_start, line_len, lang, &in_block_comment, indent, buf);
+        } else {
+            rendered_line_t *rline = line_buffer_append_line(buf);
+            if (rline) {
+                rline->indent = indent;
+                if (line_len > 0) {
+                    char *text = strndup(line_start, line_len);
+                    if (text) {
+                        styled_span_t span = styled_span_create(text, STYLE_CODE, COLOR_CODE_BLOCK);
+                        rendered_line_append_span(rline, &span);
+                        free(text);
+                    }
+                }
+            }
+        }
+
+        line_start = (*line_end == '\n') ? line_end + 1 : line_end;
+    }
+
+    return SUCCESS;
+}

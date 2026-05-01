@@ -1,0 +1,81 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config gcc \
+            libcmark-gfm-dev libcmark-gfm-extensions-dev libncurses-dev
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+          make -C build -j$(nproc)
+
+      - name: Build .deb package
+        run: ./packaging/build-deb.sh
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remedy-linux-amd64-deb
+          path: packaging/*.deb
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake pkg-config cmark-gfm ncurses
+
+      - name: Build
+        run: |
+          BREW_PREFIX="$(brew --prefix)"
+          export PKG_CONFIG_PATH="${BREW_PREFIX}/opt/ncurses/lib/pkgconfig:${BREW_PREFIX}/opt/cmark-gfm/lib/pkgconfig"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          make -C build -j$(sysctl -n hw.logicalcpu)
+
+      - name: Package binary
+        run: |
+          strip build/remedy
+          tar -czf packaging/remedy-macos-$(uname -m).tar.gz -C build remedy
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remedy-macos
+          path: packaging/remedy-macos-*.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/remedy-linux-amd64-deb/*.deb
+            artifacts/remedy-macos/*.tar.gz
+          generate_release_notes: true
