@@ -7,6 +7,7 @@
 
 #include "kitty_graphics.h"
 #include "renderer.h"
+#include "sanitize.h"
 
 #include <ncurses.h>
 #include <stdlib.h>
@@ -257,10 +258,15 @@ void pager_draw(pager_state_t *state)
             bool needs_raw      = (span->style & STYLE_STRIKETHROUGH) || span->link_url;
 
             if (needs_raw && span->text && col >= 0 && col < state->term_width) {
+                char *safe_text = sanitize_for_escape(span->text);
+                if (!safe_text) {
+                    col += span->display_width;
+                    continue;
+                }
+
                 printf("\033[%d;%dH", row + 1, col + 1);
 
-                /* Set color so raw output matches ncurses */
-                if (span->link_url) {
+                if (span->link_url && is_safe_for_escape(span->link_url)) {
                     printf("\033]8;;%s\033\\", span->link_url);
                     printf("\033[4;34m");
                 }
@@ -268,12 +274,13 @@ void pager_draw(pager_state_t *state)
                     printf("\033[9m");
                 }
 
-                printf("%s", span->text);
+                printf("%s", safe_text);
+                free(safe_text);
 
                 if (span->style & STYLE_STRIKETHROUGH) {
                     printf("\033[29m");
                 }
-                if (span->link_url) {
+                if (span->link_url && is_safe_for_escape(span->link_url)) {
                     printf("\033[24;39m");
                     printf("\033]8;;\033\\");
                 }
@@ -866,17 +873,14 @@ void pager_show_diagnose(pager_state_t *state)
 
             case '\n':
             case '\r':
-                /* Jump to the issue's line */
+                /* Jump to the issue's source line */
                 if (cursor < (int) state->lint->count) {
-                    /* Find the buffer line closest to the source line */
                     int target_line = state->lint->issues[cursor].line;
-                    size_t best     = 0;
-                    for (size_t i = 0; i < state->buf->line_count; i++) {
-                        (void) target_line;
-                        best = i < (size_t) target_line ? i : (size_t) target_line;
-                        break;
+                    size_t target   = target_line > 1 ? (size_t) (target_line - 1) : 0;
+                    if (target >= state->buf->line_count) {
+                        target = state->buf->line_count > 0 ? state->buf->line_count - 1 : 0;
                     }
-                    state->scroll_offset = best > 0 ? best - 1 : 0;
+                    state->scroll_offset = target;
 
                     size_t max_offset = 0;
                     if (state->buf->line_count > (size_t) (state->term_height - 1)) {

@@ -74,7 +74,9 @@ int md_parser_read_file(const char *path, char **out_text, size_t *out_len)
     long file_size = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
-    if (file_size < 0) {
+#define MAX_MARKDOWN_SIZE (5 * 1024 * 1024)
+
+    if (file_size < 0 || (size_t) file_size > MAX_MARKDOWN_SIZE) {
         fclose(fp);
         return FAILURE;
     }
@@ -110,6 +112,10 @@ int md_parser_read_stdin(char **out_text, size_t *out_len)
     }
 
     while (!feof(stdin)) {
+        if (length > MAX_MARKDOWN_SIZE) {
+            free(text);
+            return FAILURE;
+        }
         if (length + 4096 > capacity) {
             capacity *= 2;
             char *new_text = realloc(text, capacity);

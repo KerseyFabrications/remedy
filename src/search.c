@@ -202,9 +202,10 @@ void search_highlight(search_state_t *state, line_buffer_t *buf)
                             if (new_span_count >= new_span_cap) {
                                 new_span_cap *= 2;
                                 styled_span_t *tmp = realloc(new_spans, new_span_cap * sizeof(styled_span_t));
-                                if (tmp) {
-                                    new_spans = tmp;
+                                if (!tmp) {
+                                    goto next_line;
                                 }
+                                new_spans = tmp;
                             }
 
                             new_spans[new_span_count] = styled_span_create(span->text + cursor, span->style, span->color);
@@ -225,9 +226,10 @@ void search_highlight(search_state_t *state, line_buffer_t *buf)
                             if (new_span_count >= new_span_cap) {
                                 new_span_cap *= 2;
                                 styled_span_t *tmp = realloc(new_spans, new_span_cap * sizeof(styled_span_t));
-                                if (tmp) {
-                                    new_spans = tmp;
+                                if (!tmp) {
+                                    goto next_line;
                                 }
+                                new_spans = tmp;
                             }
 
                             new_spans[new_span_count] =
@@ -260,9 +262,10 @@ void search_highlight(search_state_t *state, line_buffer_t *buf)
                     if (new_span_count >= new_span_cap) {
                         new_span_cap *= 2;
                         styled_span_t *tmp = realloc(new_spans, new_span_cap * sizeof(styled_span_t));
-                        if (tmp) {
-                            new_spans = tmp;
+                        if (!tmp) {
+                            goto next_line;
                         }
+                        new_spans = tmp;
                     }
 
                     new_spans[new_span_count] = styled_span_create(span->text + cursor, span->style, span->color);
@@ -289,6 +292,15 @@ void search_highlight(search_state_t *state, line_buffer_t *buf)
         line->span_count    = new_span_count;
         line->span_capacity = new_span_cap;
 
+        free(match_starts);
+        free(text);
+        continue;
+
+next_line:
+        for (size_t j = 0; j < new_span_count; j++) {
+            styled_span_destroy(&new_spans[j]);
+        }
+        free(new_spans);
         free(match_starts);
         free(text);
     }

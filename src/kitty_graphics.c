@@ -16,6 +16,9 @@ static const char b64_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu
 
 static char *base64_encode(const unsigned char *data, size_t len, size_t *out_len)
 {
+    if (len > SIZE_MAX / 4 * 3 - 2) {
+        return NULL;
+    }
     size_t encoded_len = 4 * ((len + 2) / 3);
     char *encoded      = malloc(encoded_len + 1);
     if (!encoded) {
@@ -151,17 +154,24 @@ int kitty_graphics_display(const char *path, int image_id, int max_width, int ma
         return 0;
     }
 
-    /* Decode any supported image format to raw RGBA pixels */
     int img_w             = 0;
     int img_h             = 0;
     int channels          = 0;
     unsigned char *pixels = stbi_load_from_memory(file_data, (int) file_len, &img_w, &img_h, &channels, 4);
     free(file_data);
 
+/* Guard against decompression bombs */
+#define MAX_IMAGE_PIXELS (16 * 1024 * 1024)
+
     if (!pixels || img_w <= 0 || img_h <= 0) {
         if (pixels) {
             stbi_image_free(pixels);
         }
+        return 0;
+    }
+
+    if ((size_t) img_w * (size_t) img_h > MAX_IMAGE_PIXELS) {
+        stbi_image_free(pixels);
         return 0;
     }
 
@@ -246,6 +256,11 @@ int kitty_graphics_render(const char *path, const char *alt_text, const char *ba
     } else if (path) {
         snprintf(full_path, sizeof(full_path), "%s", path);
     } else {
+        full_path[0] = '\0';
+    }
+
+    /* Path traversal protection: reject absolute paths and .. components */
+    if (path && (path[0] == '/' || strstr(path, ".."))) {
         full_path[0] = '\0';
     }
 

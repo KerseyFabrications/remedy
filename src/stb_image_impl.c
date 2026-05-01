@@ -11,4 +11,5 @@
 #define STBI_ONLY_GIF
 #define STBI_ONLY_BMP
 #define STBI_NO_STDIO
+#define STBI_MAX_DIMENSIONS 8192
 #include "stb_image.h"

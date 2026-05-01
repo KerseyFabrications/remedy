@@ -27,6 +27,7 @@ set(SOURCES
     src/renderer.c
     src/syntax_highlight.c
     src/search.c
+    src/sanitize.c
     src/lint.c
     src/table_layout.c
     src/kitty_graphics.c

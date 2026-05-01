@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#define _XOPEN_SOURCE 700
+
 #include "renderer.h"
 
 #include "kitty_graphics.h"
@@ -13,6 +15,7 @@
 #include <cmark-gfm.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 #define MAX_STYLE_DEPTH 32
 
@@ -180,7 +183,13 @@ static void handle_node_enter(render_context_t *ctx, cmark_node *node, cmark_nod
 
             ctx_push_style(ctx, STYLE_BOLD | STYLE_HEADING, heading_color(level));
 
-            char prefix[8];
+            if (level < 1) {
+                level = 1;
+            }
+            if (level > 6) {
+                level = 6;
+            }
+            char prefix[16];
             memset(prefix, '#', (size_t) level);
             prefix[level]     = ' ';
             prefix[level + 1] = '\0';
@@ -516,9 +525,171 @@ int renderer_render(cmark_node *doc, int terminal_width, line_buffer_t *buf, toc
     return SUCCESS;
 }
 
+static void wrap_single_line(rendered_line_t *line, int available_width, line_buffer_t *out)
+{
+    int col                  = 0;
+    size_t break_span_idx    = 0;
+    size_t break_byte_offset = 0;
+    bool found_break         = false;
+
+    size_t last_space_span = 0;
+    size_t last_space_byte = 0;
+    bool has_space         = false;
+
+    for (size_t s = 0; s < line->span_count && !found_break; s++) {
+        const char *text = line->spans[s].text;
+        size_t len       = line->spans[s].text_len;
+        size_t b         = 0;
+
+        while (b < len) {
+            if (text[b] == ' ') {
+                last_space_span = s;
+                last_space_byte = b;
+                has_space       = true;
+                col++;
+                b++;
+            } else {
+                unsigned char c = (unsigned char) text[b];
+                int char_width  = 1;
+                size_t char_len = 1;
+
+                if (c >= 0x80) {
+                    wchar_t wc;
+                    mbstate_t state;
+                    memset(&state, 0, sizeof(state));
+                    size_t consumed = mbrtowc(&wc, text + b, len - b, &state);
+                    if (consumed != (size_t) -1 && consumed != (size_t) -2 && consumed > 0) {
+                        int w = wcwidth(wc);
+                        if (w > 0) {
+                            char_width = w;
+                        }
+                        char_len = consumed;
+                    }
+                }
+
+                col += char_width;
+                b += char_len;
+            }
+
+            if (col > available_width) {
+                if (has_space) {
+                    break_span_idx    = last_space_span;
+                    break_byte_offset = last_space_byte;
+                } else {
+                    break_span_idx    = s;
+                    break_byte_offset = b > 0 ? b - 1 : 0;
+                }
+                found_break = true;
+                break;
+            }
+        }
+    }
+
+    if (!found_break) {
+        rendered_line_t *out_line = line_buffer_append_line(out);
+        if (out_line) {
+            *out_line = *line;
+        }
+        return;
+    }
+
+    /* Build the truncated first line */
+    rendered_line_t *first = line_buffer_append_line(out);
+    if (!first) {
+        return;
+    }
+
+    first->indent          = line->indent;
+    first->is_continuation = line->is_continuation;
+
+    /* Copy spans up to the break point */
+    for (size_t s = 0; s < break_span_idx; s++) {
+        styled_span_t copy = styled_span_create(line->spans[s].text, line->spans[s].style, line->spans[s].color);
+        copy.heading_level = line->spans[s].heading_level;
+        if (line->spans[s].link_url) {
+            copy.link_url = strdup(line->spans[s].link_url);
+        }
+        rendered_line_append_span(first, &copy);
+    }
+
+    /* Truncate the break span */
+    styled_span_t *break_span = &line->spans[break_span_idx];
+    if (break_byte_offset > 0) {
+        styled_span_t truncated = styled_span_create("", break_span->style, break_span->color);
+        free(truncated.text);
+        truncated.text          = strndup(break_span->text, break_byte_offset);
+        truncated.text_len      = break_byte_offset;
+        truncated.display_width = 0;
+        for (size_t s = 0; s < first->span_count; s++) {
+            truncated.display_width = 0;
+        }
+        truncated.heading_level = break_span->heading_level;
+        if (break_span->link_url) {
+            truncated.link_url = strdup(break_span->link_url);
+        }
+        rendered_line_append_span(first, &truncated);
+    }
+
+    /* Build the remainder line */
+    rendered_line_t remainder_line;
+    memset(&remainder_line, 0, sizeof(remainder_line));
+    remainder_line.indent          = line->indent;
+    remainder_line.is_continuation = true;
+
+    size_t split_at = has_space ? break_byte_offset + 1 : break_byte_offset;
+    if (split_at < break_span->text_len) {
+        const char *rem_text   = break_span->text + split_at;
+        styled_span_t rem_span = styled_span_create(rem_text, break_span->style, break_span->color);
+        rem_span.heading_level = break_span->heading_level;
+        if (break_span->link_url) {
+            rem_span.link_url = strdup(break_span->link_url);
+        }
+        rendered_line_append_span(&remainder_line, &rem_span);
+    }
+
+    for (size_t s = break_span_idx + 1; s < line->span_count; s++) {
+        styled_span_t copy = styled_span_create(line->spans[s].text, line->spans[s].style, line->spans[s].color);
+        copy.heading_level = line->spans[s].heading_level;
+        if (line->spans[s].link_url) {
+            copy.link_url = strdup(line->spans[s].link_url);
+        }
+        rendered_line_append_span(&remainder_line, &copy);
+    }
+
+    /* Recursively wrap the remainder if still too long */
+    int rem_width = 0;
+    for (size_t s = 0; s < remainder_line.span_count; s++) {
+        rem_width += remainder_line.spans[s].display_width;
+    }
+
+    if (rem_width > available_width) {
+        wrap_single_line(&remainder_line, available_width, out);
+        rendered_line_destroy(&remainder_line);
+    } else {
+        rendered_line_t *out_rem = line_buffer_append_line(out);
+        if (out_rem) {
+            *out_rem = remainder_line;
+        }
+    }
+
+    /* Free original spans (ownership transferred to first/remainder) */
+    for (size_t s = 0; s < line->span_count; s++) {
+        styled_span_destroy(&line->spans[s]);
+    }
+    free(line->spans);
+    line->spans      = NULL;
+    line->span_count = 0;
+}
+
 int renderer_word_wrap(line_buffer_t *buf, int terminal_width)
 {
     if (!buf || terminal_width <= 0) {
+        return FAILURE;
+    }
+
+    /* Two-pass approach: build wrapped output into a new buffer, then swap */
+    line_buffer_t out;
+    if (line_buffer_init(&out) != SUCCESS) {
         return FAILURE;
     }
 
@@ -536,137 +707,22 @@ int renderer_word_wrap(line_buffer_t *buf, int terminal_width)
         }
 
         if (total_width <= available_width) {
-            continue;
-        }
-
-        /* Build flat text from all spans for word-boundary detection */
-        size_t flat_len = 0;
-        for (size_t s = 0; s < line->span_count; s++) {
-            flat_len += line->spans[s].text_len;
-        }
-
-        char *flat = malloc(flat_len + 1);
-        if (!flat) {
-            continue;
-        }
-
-        size_t pos = 0;
-        for (size_t s = 0; s < line->span_count; s++) {
-            if (line->spans[s].text && line->spans[s].text_len > 0) {
-                memcpy(flat + pos, line->spans[s].text, line->spans[s].text_len);
-                pos += line->spans[s].text_len;
+            rendered_line_t *out_line = line_buffer_append_line(&out);
+            if (out_line) {
+                *out_line = *line;
             }
-        }
-        flat[pos] = '\0';
-
-        /* Find where to break: walk through spans tracking column width */
-        int col                  = 0;
-        size_t break_span_idx    = 0;
-        size_t break_byte_offset = 0;
-        bool found_break         = false;
-
-        size_t last_space_span = 0;
-        size_t last_space_byte = 0;
-        bool has_space         = false;
-
-        for (size_t s = 0; s < line->span_count && !found_break; s++) {
-            const char *text = line->spans[s].text;
-            size_t len       = line->spans[s].text_len;
-
-            for (size_t b = 0; b < len; b++) {
-                if (text[b] == ' ') {
-                    last_space_span = s;
-                    last_space_byte = b;
-                    has_space       = true;
-                }
-
-                col++;
-                if (col > available_width) {
-                    if (has_space) {
-                        break_span_idx    = last_space_span;
-                        break_byte_offset = last_space_byte;
-                    } else {
-                        break_span_idx    = s;
-                        break_byte_offset = b;
-                    }
-                    found_break = true;
-                    break;
-                }
-            }
-        }
-
-        free(flat);
-
-        if (!found_break) {
-            continue;
-        }
-
-        /* Create continuation line with remaining spans */
-        rendered_line_t *new_line = line_buffer_append_line(buf);
-        if (!new_line) {
-            continue;
-        }
-
-        /* Refresh line pointer since realloc may have moved it */
-        line = &buf->lines[i];
-
-        new_line->indent          = line->indent;
-        new_line->is_continuation = true;
-
-        /* Split the break span */
-        styled_span_t *break_span = &line->spans[break_span_idx];
-        size_t split_at           = break_byte_offset;
-
-        if (has_space) {
-            split_at = break_byte_offset + 1;
-        }
-
-        if (split_at < break_span->text_len) {
-            const char *remainder_text = break_span->text + split_at;
-            styled_span_t remainder    = styled_span_create(remainder_text, break_span->style, break_span->color);
-            remainder.heading_level    = break_span->heading_level;
-            if (break_span->link_url) {
-                remainder.link_url = strdup(break_span->link_url);
-            }
-            rendered_line_append_span(new_line, &remainder);
-        }
-
-        /* Copy remaining full spans to the continuation line */
-        for (size_t s = break_span_idx + 1; s < line->span_count; s++) {
-            styled_span_t copy = styled_span_create(line->spans[s].text, line->spans[s].style, line->spans[s].color);
-            copy.heading_level = line->spans[s].heading_level;
-            if (line->spans[s].link_url) {
-                copy.link_url = strdup(line->spans[s].link_url);
-            }
-            rendered_line_append_span(new_line, &copy);
-        }
-
-        /* Truncate the original line's break span */
-        if (has_space) {
-            char *truncated = strndup(break_span->text, break_byte_offset);
-            free(break_span->text);
-            break_span->text     = truncated;
-            break_span->text_len = truncated ? break_byte_offset : 0;
+            line->spans      = NULL;
+            line->span_count = 0;
         } else {
-            char *truncated = strndup(break_span->text, break_byte_offset);
-            free(break_span->text);
-            break_span->text     = truncated;
-            break_span->text_len = truncated ? break_byte_offset : 0;
-        }
-
-        /* Free and remove spans after the break point from the original line */
-        for (size_t s = break_span_idx + 1; s < line->span_count; s++) {
-            styled_span_destroy(&line->spans[s]);
-        }
-        line->span_count = break_span_idx + 1;
-
-        /* Move the continuation line right after the current line */
-        if (buf->line_count - 1 != i + 1) {
-            rendered_line_t temp = buf->lines[buf->line_count - 1];
-            memmove(&buf->lines[i + 2], &buf->lines[i + 1], (buf->line_count - 2 - i) * sizeof(rendered_line_t));
-            buf->lines[i + 1] = temp;
+            wrap_single_line(line, available_width, &out);
         }
     }
+
+    /* Swap the new buffer into the original */
+    free(buf->lines);
+    buf->lines         = out.lines;
+    buf->line_count    = out.line_count;
+    buf->line_capacity = out.line_capacity;
 
     return SUCCESS;
 }
