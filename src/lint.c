@@ -94,14 +94,14 @@ static void check_heading_hierarchy(cmark_node *doc, lint_results_t *results)
 
         if (level == 1) {
             if (has_h1) {
-                lint_add(results, LINT_WARNING, line, "Multiple H1 headings");
+                lint_add(results, LINT_WARNING, line, "Multiple H1 headings (consider a single top-level title)");
             }
             has_h1 = true;
         }
 
         if (prev_level > 0 && level > prev_level + 1) {
             char msg[128];
-            snprintf(msg, sizeof(msg), "Heading level skips from H%d to H%d", prev_level, level);
+            snprintf(msg, sizeof(msg), "Heading jumps from H%d to H%d (missing H%d)", prev_level, level, prev_level + 1);
             lint_add(results, LINT_WARNING, line, msg);
         }
 
@@ -244,7 +244,7 @@ static void check_raw_text(const char *text, size_t text_len, lint_results_t *re
         if (text[i] == '\n') {
             if (line_len > 200) {
                 char msg[128];
-                snprintf(msg, sizeof(msg), "Line exceeds 200 characters (%d chars)", line_len);
+                snprintf(msg, sizeof(msg), "Line exceeds 200 characters (%d)", line_len);
                 lint_add(results, LINT_WARNING, line, msg);
             }
 
@@ -279,49 +279,68 @@ static void check_raw_text(const char *text, size_t text_len, lint_results_t *re
     }
 }
 
-static void check_tables(cmark_node *doc, lint_results_t *results)
+static int count_pipes(const char *start, size_t len)
 {
-    cmark_iter *iter = cmark_iter_new(doc);
-    cmark_event_type ev;
-
-    while ((ev = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
-        cmark_node *node = cmark_iter_get_node(iter);
-        if (ev != CMARK_EVENT_ENTER) {
-            continue;
-        }
-
-        const char *type_str = cmark_node_get_type_string(node);
-        if (!type_str || strcmp(type_str, "table") != 0) {
-            continue;
-        }
-
-        int line        = cmark_node_get_start_line(node);
-        int header_cols = 0;
-
-        cmark_node *row = cmark_node_first_child(node);
-        int row_num     = 0;
-        while (row) {
-            int cols         = 0;
-            cmark_node *cell = cmark_node_first_child(row);
-            while (cell) {
-                cols++;
-                cell = cmark_node_next(cell);
-            }
-
-            if (row_num == 0) {
-                header_cols = cols;
-            } else if (cols != header_cols) {
-                char msg[128];
-                snprintf(msg, sizeof(msg), "Table row %d has %d columns, header has %d", row_num + 1, cols, header_cols);
-                lint_add(results, LINT_WARNING, line, msg);
-            }
-
-            row_num++;
-            row = cmark_node_next(row);
+    int pipes = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (start[i] == '|') {
+            pipes++;
         }
     }
+    return pipes;
+}
 
-    cmark_iter_free(iter);
+static bool is_separator_row(const char *start, size_t len)
+{
+    bool has_dash = false;
+    for (size_t i = 0; i < len; i++) {
+        char c = start[i];
+        if (c == '-') {
+            has_dash = true;
+        } else if (c != '|' && c != ':' && c != ' ' && c != '\t') {
+            return false;
+        }
+    }
+    return has_dash;
+}
+
+static void check_tables_raw(const char *text, size_t text_len, lint_results_t *results)
+{
+    int line_num     = 1;
+    const char *ls   = text;
+    int header_pipes = 0;
+    bool in_table    = false;
+
+    for (size_t i = 0; i <= text_len; i++) {
+        if (i < text_len && text[i] != '\n') {
+            continue;
+        }
+
+        size_t line_len   = (size_t) (&text[i] - ls);
+        bool is_table_row = (line_len > 0 && ls[0] == '|');
+
+        if (is_table_row) {
+            int pipes = count_pipes(ls, line_len);
+
+            if (!in_table) {
+                in_table     = true;
+                header_pipes = pipes;
+            } else if (!is_separator_row(ls, line_len) && pipes != header_pipes) {
+                char msg[128];
+                snprintf(msg,
+                         sizeof(msg),
+                         "Table row has %d columns, header has %d",
+                         pipes > 1 ? pipes - 1 : pipes,
+                         header_pipes > 1 ? header_pipes - 1 : header_pipes);
+                lint_add(results, LINT_WARNING, line_num, msg);
+            }
+        } else {
+            in_table = false;
+        }
+
+        ls = &text[i + 1];
+        line_num++;
+    }
 }
 
 static int compare_issues(const void *a, const void *b)
@@ -346,10 +365,10 @@ int lint_check(cmark_node *doc, const char *text, size_t text_len, const char *b
     check_images(doc, base_dir, results);
     check_links(doc, results);
     check_code_blocks(doc, results);
-    check_tables(doc, results);
 
     if (text && text_len > 0) {
         check_raw_text(text, text_len, results);
+        check_tables_raw(text, text_len, results);
     }
 
     if (results->count > 1) {
