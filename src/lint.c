@@ -101,7 +101,17 @@ static void check_heading_hierarchy(cmark_node *doc, lint_results_t *results)
 
         if (prev_level > 0 && level > prev_level + 1) {
             char msg[128];
-            snprintf(msg, sizeof(msg), "Heading jumps from H%d to H%d (missing H%d)", prev_level, level, prev_level + 1);
+            if (level - prev_level == 2) {
+                snprintf(msg, sizeof(msg), "Heading jumps from H%d to H%d (missing H%d)", prev_level, level, prev_level + 1);
+            } else {
+                snprintf(msg,
+                         sizeof(msg),
+                         "Heading jumps from H%d to H%d (missing H%d\xe2\x80\x93H%d)",
+                         prev_level,
+                         level,
+                         prev_level + 1,
+                         level - 1);
+            }
             lint_add(results, LINT_WARNING, line, msg);
         }
 
@@ -327,11 +337,9 @@ static void check_tables_raw(const char *text, size_t text_len, lint_results_t *
                 header_pipes = pipes;
             } else if (!is_separator_row(ls, line_len) && pipes != header_pipes) {
                 char msg[128];
-                snprintf(msg,
-                         sizeof(msg),
-                         "Table row has %d columns, header has %d",
-                         pipes > 1 ? pipes - 1 : pipes,
-                         header_pipes > 1 ? header_pipes - 1 : header_pipes);
+                int row_cols    = pipes > 1 ? pipes - 1 : pipes;
+                int expect_cols = header_pipes > 1 ? header_pipes - 1 : header_pipes;
+                snprintf(msg, sizeof(msg), "Table row has %d columns (expected %d)", row_cols, expect_cols);
                 lint_add(results, LINT_WARNING, line_num, msg);
             }
         } else {
