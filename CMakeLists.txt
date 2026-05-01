@@ -54,3 +54,4 @@ target_link_directories(remedy PRIVATE
 # Install
 include(GNUInstallDirs)
 install(TARGETS remedy RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES man/remedy.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)

@@ -1,0 +1,168 @@
+.TH REMEDY 1 "2026-04-30" "remedy 0.1.0" "User Commands"
+.SH NAME
+remedy \- a full-featured markdown pager for modern terminals
+.SH SYNOPSIS
+.B remedy
+.RI [ options ]
+.RI [ file.md ]
+.SH DESCRIPTION
+.B remedy
+is a less-like pager that renders Markdown with full formatting support.
+It displays headings, bold, italic, code blocks with syntax highlighting,
+tables with box-drawing borders, clickable hyperlinks, inline images,
+and more.
+.PP
+If no file is given,
+.B remedy
+reads from standard input.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Show help message and exit.
+.TP
+.BR \-v ", " \-\-version
+Show version and exit.
+.TP
+.BR \-d ", " \-\-diagnose
+Check markdown for issues and exit. Prints diagnostics to stdout
+and exits with code 0 if healthy, 1 if issues are found.
+.SH KEYBINDINGS
+.SS Navigation
+.TP
+.BR j ", " Down ", " Enter
+Scroll down one line.
+.TP
+.BR k ", " Up
+Scroll up one line.
+.TP
+.BR f ", " Space ", " PgDn
+Page down.
+.TP
+.BR b ", " PgUp
+Page up.
+.TP
+.BR d ", " Ctrl-D
+Half page down.
+.TP
+.BR u ", " Ctrl-U
+Half page up.
+.TP
+.BR g ", " Home
+Go to top of document.
+.TP
+.BR G ", " End
+Go to bottom of document.
+.SS Search
+.TP
+.B /
+Search forward. Type a query and press Enter.
+.TP
+.B ?
+Search backward.
+.TP
+.B n
+Jump to next match.
+.TP
+.B N
+Jump to previous match.
+.SS Features
+.TP
+.B t
+Open table of contents overlay. Navigate with j/k, press Enter to jump.
+.TP
+.B D
+Open diagnosis overlay showing markdown issues.
+.TP
+.B h
+Show help overlay with keybinding reference.
+.TP
+.B Ctrl-L
+Redraw screen.
+.TP
+.BR q ", " ESC
+Quit.
+.SH MARKDOWN SUPPORT
+.B remedy
+supports CommonMark and GitHub Flavored Markdown (GFM) extensions:
+.PP
+.RS 4
+Headings (6 levels, color-coded)
+.br
+Bold, italic, bold+italic
+.br
+Inline code and fenced code blocks with syntax highlighting
+.br
+Blockquotes with vertical bar prefix
+.br
+Ordered and unordered lists with nested bullet cycling
+.br
+Strikethrough
+.br
+Links with OSC 8 clickable hyperlinks
+.br
+Images via Kitty graphics protocol (PNG, JPEG, GIF, BMP)
+.br
+Tables with box-drawing borders and column alignment
+.br
+Horizontal rules
+.RE
+.SS Syntax Highlighting
+Code blocks with language hints are syntax highlighted. Supported
+languages: C, C++, Python, JavaScript, TypeScript, Rust, Go, Java,
+Shell/Bash.
+.SS Inline Images
+On terminals supporting the Kitty graphics protocol (Kitty, Ghostty,
+WezTerm), images referenced in markdown are displayed inline with
+correct aspect ratio. On other terminals, a text placeholder is shown.
+.SH DIAGNOSIS
+.B remedy \-\-diagnose
+checks markdown for common issues:
+.PP
+.RS 4
+Heading hierarchy (skipped levels, multiple H1s, missing H1)
+.br
+Broken local image references
+.br
+Missing image alt text
+.br
+Empty or missing link URLs
+.br
+Links without display text
+.br
+Code blocks missing language hints
+.br
+Empty code blocks
+.br
+Table column count mismatches
+.br
+Trailing whitespace
+.br
+Excessive blank lines
+.RE
+.PP
+Issues are classified as errors (broken rendering) or warnings
+(style/best practice).
+.SH STDIN
+.B remedy
+supports piped input:
+.PP
+.RS 4
+cat README.md | remedy
+.br
+curl -s https://example.com/doc.md | remedy
+.RE
+.SH EXIT STATUS
+.TP
+.B 0
+Success, or no issues found (with \-\-diagnose).
+.TP
+.B 1
+Issues found (with \-\-diagnose), or error.
+.SH AUTHORS
+Kris Kersey and Claude (Anthropic).
+.SH LICENSE
+GPL-3.0-or-later
+.SH SEE ALSO
+.BR less (1),
+.BR glow (1),
+.BR mdcat (1)

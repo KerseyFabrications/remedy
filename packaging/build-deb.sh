@@ -44,6 +44,11 @@ mkdir -p "${PKG_DIR}/usr/bin"
 cp "${PROJECT_DIR}/build/remedy" "${PKG_DIR}/usr/bin/remedy"
 strip "${PKG_DIR}/usr/bin/remedy"
 
+# Install man page
+mkdir -p "${PKG_DIR}/usr/share/man/man1"
+cp "${PROJECT_DIR}/man/remedy.1" "${PKG_DIR}/usr/share/man/man1/remedy.1"
+gzip -9 "${PKG_DIR}/usr/share/man/man1/remedy.1"
+
 # Get dependency library versions
 CMARK_VER=$(dpkg -s libcmark-gfm0.29.0.gfm.6 2>/dev/null | grep '^Version:' | cut -d' ' -f2 || echo "")
 NCURSES_VER=$(dpkg -s libncursesw6 2>/dev/null | grep '^Version:' | cut -d' ' -f2 || echo "")
