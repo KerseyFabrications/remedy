@@ -13,6 +13,6 @@
 #define SUCCESS        0
 #define FAILURE        1
 
-#define REMEDY_VERSION "0.1.0"
+#define REMEDY_VERSION "0.2.0"
 
 #endif /* REMEDY_H */

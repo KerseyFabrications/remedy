@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-VERSION="0.1.0"
+VERSION="0.2.0"
 ARCH="$(dpkg --print-architecture)"
 PKG_NAME="remedy"
 PKG_DIR="${PROJECT_DIR}/packaging/${PKG_NAME}_${VERSION}_${ARCH}"
