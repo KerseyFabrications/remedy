@@ -67,10 +67,39 @@ static void draw_status_bar(pager_state_t *state)
         }
     }
 
-    char left[256];
-    snprintf(left, sizeof(left), " %s  |  Line %zu/%zu  |  %d%%", name, state->scroll_offset + 1, state->buf->line_count, percent);
+    const char *health = "";
+    if (state->lint) {
+        if (state->lint->count == 0) {
+            health = "  |  healthy";
+        } else if (state->lint->count == 1) {
+            health = "  |  1 issue";
+        } else {
+            health = "  |  issues";
+        }
+    }
 
-    const char *hints = "q:quit  /:search  t:toc  h:help";
+    char left[256];
+    if (state->lint && state->lint->count > 1) {
+        snprintf(left,
+                 sizeof(left),
+                 " %s  |  Line %zu/%zu  |  %d%%  |  %zu issues",
+                 name,
+                 state->scroll_offset + 1,
+                 state->buf->line_count,
+                 percent,
+                 state->lint->count);
+    } else {
+        snprintf(left,
+                 sizeof(left),
+                 " %s  |  Line %zu/%zu  |  %d%%%s",
+                 name,
+                 state->scroll_offset + 1,
+                 state->buf->line_count,
+                 percent,
+                 health);
+    }
+
+    const char *hints = "q:quit  /:search  t:toc  D:diagnose  h:help";
     int hints_len     = (int) strlen(hints);
     int left_len      = (int) strlen(left);
 
@@ -635,6 +664,7 @@ void pager_show_help(pager_state_t *state)
         "",
         "Features",
         "  t                   Table of contents",
+        "  D                   Diagnose markdown",
         "  Ctrl-L              Redraw screen",
         "  h                   This help screen",
         "  q / ESC             Quit",
@@ -696,4 +726,178 @@ void pager_show_help(pager_state_t *state)
     wgetch(help_win);
 
     delwin(help_win);
+}
+
+void pager_show_diagnose(pager_state_t *state)
+{
+    if (!state->lint) {
+        return;
+    }
+
+    kitty_graphics_delete_placements();
+
+    int win_width  = state->term_width * 3 / 4;
+    int win_height = (int) state->lint->count + 6;
+
+    if (win_width < 40) {
+        win_width = 40;
+    }
+    if (win_height < 8) {
+        win_height = 8;
+    }
+    if (win_height > state->term_height - 2) {
+        win_height = state->term_height - 2;
+    }
+    if (win_width > state->term_width - 4) {
+        win_width = state->term_width - 4;
+    }
+
+    int start_y = (state->term_height - win_height) / 2;
+    int start_x = (state->term_width - win_width) / 2;
+
+    WINDOW *win = newwin(win_height, win_width, start_y, start_x);
+    if (!win) {
+        return;
+    }
+
+    keypad(win, TRUE);
+
+    int cursor       = 0;
+    int scroll       = 0;
+    int content_rows = win_height - 6;
+
+    while (1) {
+        werase(win);
+        box(win, 0, 0);
+
+        /* Title */
+        wattron(win, A_BOLD);
+        if (state->lint->count == 0) {
+            mvwaddstr(win, 1, 3, "Diagnosis: healthy");
+        } else {
+            char title[64];
+            snprintf(title, sizeof(title), "Diagnosis: %zu issue%s found", state->lint->count, state->lint->count == 1 ? "" : "s");
+            mvwaddstr(win, 1, 3, title);
+        }
+        wattroff(win, A_BOLD);
+        mvwhline(win, 2, 1, ACS_HLINE, win_width - 2);
+
+        if (state->lint->count == 0) {
+            wattron(win, COLOR_PAIR(COLOR_HEADING2));
+            mvwaddstr(win, 4, 3, "No issues found. Your markdown looks good!");
+            wattroff(win, COLOR_PAIR(COLOR_HEADING2));
+        } else {
+            /* Column headers */
+            wattron(win, A_DIM);
+            mvwaddstr(win, 3, 3, "Line  Sev  Description");
+            wattroff(win, A_DIM);
+            mvwhline(win, 4, 1, ACS_HLINE, win_width - 2);
+
+            for (int row = 0; row < content_rows; row++) {
+                int idx = scroll + row;
+                if (idx >= (int) state->lint->count) {
+                    break;
+                }
+
+                lint_issue_t *issue = &state->lint->issues[idx];
+
+                if (idx == cursor) {
+                    wattron(win, A_REVERSE);
+                }
+
+                wmove(win, row + 5, 1);
+                for (int i = 0; i < win_width - 2; i++) {
+                    waddch(win, ' ');
+                }
+
+                /* Line number */
+                char line_str[8];
+                snprintf(line_str, sizeof(line_str), "%4d", issue->line);
+                mvwaddstr(win, row + 5, 3, line_str);
+
+                /* Severity */
+                if (issue->severity == LINT_ERROR) {
+                    wattron(win, COLOR_PAIR(COLOR_HEADING1) | A_BOLD);
+                    mvwaddstr(win, row + 5, 9, "ERR");
+                    wattroff(win, COLOR_PAIR(COLOR_HEADING1) | A_BOLD);
+                } else {
+                    wattron(win, COLOR_PAIR(COLOR_HEADING4));
+                    mvwaddstr(win, row + 5, 9, "WRN");
+                    wattroff(win, COLOR_PAIR(COLOR_HEADING4));
+                }
+
+                /* Message */
+                int max_msg = win_width - 16;
+                if (max_msg > 0 && issue->message) {
+                    mvwaddnstr(win, row + 5, 14, issue->message, max_msg);
+                }
+
+                if (idx == cursor) {
+                    wattroff(win, A_REVERSE);
+                }
+            }
+        }
+
+        wrefresh(win);
+
+        nodelay(win, FALSE);
+        int ch = wgetch(win);
+
+        switch (ch) {
+            case 'j':
+            case KEY_DOWN:
+                if (cursor < (int) state->lint->count - 1) {
+                    cursor++;
+                    if (cursor - scroll >= content_rows) {
+                        scroll++;
+                    }
+                }
+                break;
+
+            case 'k':
+            case KEY_UP:
+                if (cursor > 0) {
+                    cursor--;
+                    if (cursor < scroll) {
+                        scroll = cursor;
+                    }
+                }
+                break;
+
+            case '\n':
+            case '\r':
+                /* Jump to the issue's line */
+                if (cursor < (int) state->lint->count) {
+                    /* Find the buffer line closest to the source line */
+                    int target_line = state->lint->issues[cursor].line;
+                    size_t best     = 0;
+                    for (size_t i = 0; i < state->buf->line_count; i++) {
+                        (void) target_line;
+                        best = i < (size_t) target_line ? i : (size_t) target_line;
+                        break;
+                    }
+                    state->scroll_offset = best > 0 ? best - 1 : 0;
+
+                    size_t max_offset = 0;
+                    if (state->buf->line_count > (size_t) (state->term_height - 1)) {
+                        max_offset = state->buf->line_count - (size_t) (state->term_height - 1);
+                    }
+                    if (state->scroll_offset > max_offset) {
+                        state->scroll_offset = max_offset;
+                    }
+                }
+                goto diag_done;
+
+            case 'q':
+            case 27:
+            case 'd':
+                goto diag_done;
+
+            default:
+                break;
+        }
+    }
+
+diag_done:
+    delwin(win);
 }

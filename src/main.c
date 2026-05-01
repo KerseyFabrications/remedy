@@ -4,6 +4,7 @@
  */
 
 #include "input.h"
+#include "lint.h"
 #include "md_parser.h"
 #include "pager.h"
 #include "remedy.h"
@@ -42,7 +43,8 @@ static void print_usage(const char *program_name)
     fprintf(stderr, "  A full-featured markdown pager for the terminal.\n\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -h, --help       Show this help message\n");
-    fprintf(stderr, "  -v, --version    Show version\n\n");
+    fprintf(stderr, "  -v, --version    Show version\n");
+    fprintf(stderr, "  -d, --diagnose   Check markdown for issues and exit\n\n");
     fprintf(stderr, "If no file is given, reads from stdin.\n");
 }
 
@@ -51,6 +53,7 @@ int main(int argc, char *argv[])
     setlocale(LC_ALL, "");
 
     const char *filename = NULL;
+    bool diagnose_only   = false;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
@@ -59,6 +62,8 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
             printf("remedy %s\n", REMEDY_VERSION);
             return 0;
+        } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--diagnose") == 0) {
+            diagnose_only = true;
         } else if (argv[i][0] == '-') {
             fprintf(stderr, "Unknown option: %s\n", argv[i]);
             print_usage(argv[0]);
@@ -103,19 +108,16 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    int term_width = get_terminal_width();
-
-    line_buffer_t buf;
-    toc_t toc;
-
-    if (line_buffer_init(&buf) != SUCCESS || toc_init(&toc) != SUCCESS) {
+    /* Run lint checks */
+    lint_results_t lint;
+    if (lint_init(&lint) != SUCCESS) {
         fprintf(stderr, "Error: memory allocation failed\n");
         md_parser_free(doc);
         free(text);
         return 1;
     }
 
-    /* Resolve base directory for relative image paths */
+    /* Resolve base directory for relative paths */
     char *base_dir = NULL;
     if (filename) {
         base_dir = strdup(filename);
@@ -128,6 +130,40 @@ int main(int argc, char *argv[])
                 base_dir = strdup(".");
             }
         }
+    }
+
+    lint_check(doc, text, text_len, base_dir, &lint);
+
+    /* CLI diagnose mode: print results and exit */
+    if (diagnose_only) {
+        if (lint.count == 0) {
+            printf("remedy: %s: healthy - no issues found\n", filename ? filename : "[stdin]");
+        } else {
+            printf("remedy: %s: %zu issue%s found\n", filename ? filename : "[stdin]", lint.count, lint.count == 1 ? "" : "s");
+            for (size_t i = 0; i < lint.count; i++) {
+                lint_issue_t *issue = &lint.issues[i];
+                printf("  line %d: %s: %s\n", issue->line, issue->severity == LINT_ERROR ? "error" : "warning", issue->message);
+            }
+        }
+
+        int exit_code = lint.count > 0 ? 1 : 0;
+        lint_destroy(&lint);
+        md_parser_free(doc);
+        free(text);
+        free(base_dir);
+        return exit_code;
+    }
+
+    int term_width = get_terminal_width();
+
+    line_buffer_t buf;
+    toc_t toc;
+
+    if (line_buffer_init(&buf) != SUCCESS || toc_init(&toc) != SUCCESS) {
+        fprintf(stderr, "Error: memory allocation failed\n");
+        md_parser_free(doc);
+        free(text);
+        return 1;
     }
 
     ret = renderer_render(doc, term_width, &buf, &toc, base_dir);
@@ -161,7 +197,8 @@ int main(int argc, char *argv[])
 
     pager_state_t pager;
 
-    ret = pager_init(&pager, &buf, &toc, filename);
+    ret        = pager_init(&pager, &buf, &toc, filename);
+    pager.lint = &lint;
     if (ret != SUCCESS) {
         fprintf(stderr, "Error: failed to initialize pager\n");
         if (tty_fp) {
@@ -252,6 +289,11 @@ int main(int argc, char *argv[])
                 pager_draw(&pager);
                 break;
 
+            case ACTION_DIAGNOSE:
+                pager_show_diagnose(&pager);
+                pager_draw(&pager);
+                break;
+
             case ACTION_HELP:
                 pager_show_help(&pager);
                 pager_draw(&pager);
@@ -282,6 +324,7 @@ int main(int argc, char *argv[])
         fclose(tty_fp);
     }
 
+    lint_destroy(&lint);
     line_buffer_destroy(&buf);
     toc_destroy(&toc);
     md_parser_free(doc);

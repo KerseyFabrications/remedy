@@ -71,6 +71,9 @@ input_action_t input_get_action(void)
         case 't':
             return ACTION_TOGGLE_TOC;
 
+        case 'D':
+            return ACTION_DIAGNOSE;
+
         case 'h':
             return ACTION_HELP;
 

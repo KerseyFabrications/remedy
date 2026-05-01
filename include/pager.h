@@ -6,6 +6,7 @@
 #ifndef PAGER_H
 #define PAGER_H
 
+#include "lint.h"
 #include "render_line.h"
 #include "search.h"
 
@@ -19,6 +20,7 @@ typedef struct {
     int term_height;
     const char *filename;
     search_state_t search;
+    lint_results_t *lint;
     bool images_transmitted[MAX_TRACKED_IMAGES];
     int images_cols[MAX_TRACKED_IMAGES];
     int images_rows[MAX_TRACKED_IMAGES];
@@ -100,5 +102,10 @@ void pager_show_toc(pager_state_t *state);
  * @param state Pager state
  */
 void pager_show_help(pager_state_t *state);
+
+/**
+ * @brief Show the diagnosis overlay with lint results
+ */
+void pager_show_diagnose(pager_state_t *state);
 
 #endif /* PAGER_H */
