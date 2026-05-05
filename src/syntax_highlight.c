@@ -401,16 +401,94 @@ highlight_line(const char *line_text, size_t line_len, const language_def_t *lan
     }
 }
 
+static int measure_line_display_width(const char *text, size_t len)
+{
+    int width = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (text[i] == '\t') {
+            width += 4 - (width % 4);
+        } else {
+            width++;
+        }
+    }
+    return width;
+}
+
+static char *make_padding(int width, style_flags_t style, color_id_t color)
+{
+    if (width <= 0) {
+        return NULL;
+    }
+    char *pad = malloc((size_t) width + 1);
+    if (!pad) {
+        return NULL;
+    }
+    memset(pad, ' ', (size_t) width);
+    pad[width] = '\0';
+    (void) style;
+    (void) color;
+    return pad;
+}
+
+static void pad_line_to_width(rendered_line_t *rline, int current_width, int block_width)
+{
+    int right_pad = block_width - current_width;
+    if (right_pad <= 0) {
+        return;
+    }
+
+    char *pad = make_padding(right_pad, STYLE_CODE, COLOR_CODE_BLOCK);
+    if (pad) {
+        styled_span_t span = styled_span_create(pad, STYLE_CODE, COLOR_CODE_BLOCK);
+        rendered_line_append_span(rline, &span);
+        free(pad);
+    }
+}
+
 int syntax_highlight_render(const char *code, const char *language, int indent, line_buffer_t *buf)
 {
     if (!code || !buf) {
         return FAILURE;
     }
 
+#define CODE_PAD_LEFT  2
+#define CODE_PAD_RIGHT 2
+
+    /* First pass: find max line width */
+    int max_width          = 0;
+    const char *line_start = code;
+    while (*line_start) {
+        const char *line_end = strchr(line_start, '\n');
+        if (!line_end) {
+            line_end = line_start + strlen(line_start);
+        }
+        size_t line_len = (size_t) (line_end - line_start);
+        int width       = measure_line_display_width(line_start, line_len);
+        if (width > max_width) {
+            max_width = width;
+        }
+        line_start = (*line_end == '\n') ? line_end + 1 : line_end;
+    }
+
+    int block_width = max_width + CODE_PAD_LEFT + CODE_PAD_RIGHT;
+
     const language_def_t *lang = find_language(language);
 
-    bool in_block_comment  = false;
-    const char *line_start = code;
+    /* Top border: empty line at block width */
+    rendered_line_t *top = line_buffer_append_line(buf);
+    if (top) {
+        top->indent = indent;
+        char *pad   = make_padding(block_width, STYLE_CODE, COLOR_CODE_BLOCK);
+        if (pad) {
+            styled_span_t span = styled_span_create(pad, STYLE_CODE, COLOR_CODE_BLOCK);
+            rendered_line_append_span(top, &span);
+            free(pad);
+        }
+    }
+
+    /* Second pass: render lines with padding */
+    bool in_block_comment = false;
+    line_start            = code;
 
     while (*line_start) {
         const char *line_end = strchr(line_start, '\n');
@@ -418,7 +496,8 @@ int syntax_highlight_render(const char *code, const char *language, int indent, 
             line_end = line_start + strlen(line_start);
         }
 
-        size_t line_len = (size_t) (line_end - line_start);
+        size_t line_len  = (size_t) (line_end - line_start);
+        size_t start_idx = buf->line_count;
 
         if (lang) {
             highlight_line(line_start, line_len, lang, &in_block_comment, indent, buf);
@@ -437,7 +516,48 @@ int syntax_highlight_render(const char *code, const char *language, int indent, 
             }
         }
 
+        /* Add left padding and right padding to the line just added */
+        if (buf->line_count > start_idx) {
+            rendered_line_t *rline = &buf->lines[buf->line_count - 1];
+
+            /* Insert left padding at the beginning */
+            char *left_pad = make_padding(CODE_PAD_LEFT, STYLE_CODE, COLOR_CODE_BLOCK);
+            if (left_pad) {
+                styled_span_t pad_span = styled_span_create(left_pad, STYLE_CODE, COLOR_CODE_BLOCK);
+                free(left_pad);
+
+                /* Shift existing spans right and insert padding at index 0 */
+                rendered_line_append_span(rline, &pad_span);
+                if (rline->span_count > 1) {
+                    styled_span_t tmp = rline->spans[rline->span_count - 1];
+                    memmove(&rline->spans[1], &rline->spans[0], (rline->span_count - 1) * sizeof(styled_span_t));
+                    rline->spans[0] = tmp;
+                }
+            }
+
+            /* Calculate current content width */
+            int content_width = 0;
+            for (size_t s = 0; s < rline->span_count; s++) {
+                content_width += rline->spans[s].display_width;
+            }
+
+            /* Right-pad to block width */
+            pad_line_to_width(rline, content_width, block_width);
+        }
+
         line_start = (*line_end == '\n') ? line_end + 1 : line_end;
+    }
+
+    /* Bottom border: empty line at block width */
+    rendered_line_t *bot = line_buffer_append_line(buf);
+    if (bot) {
+        bot->indent = indent;
+        char *pad   = make_padding(block_width, STYLE_CODE, COLOR_CODE_BLOCK);
+        if (pad) {
+            styled_span_t span = styled_span_create(pad, STYLE_CODE, COLOR_CODE_BLOCK);
+            rendered_line_append_span(bot, &span);
+            free(pad);
+        }
     }
 
     return SUCCESS;
