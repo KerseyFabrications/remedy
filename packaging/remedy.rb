@@ -3,7 +3,7 @@ class Remedy < Formula
   homepage "https://github.com/kkersey/remedy"
   # url "https://github.com/kkersey/remedy/archive/refs/tags/v0.1.0.tar.gz"
   # sha256 "UPDATE_WITH_ACTUAL_SHA256"
-  version "0.2.1"
+  version "0.3.0"
   license "GPL-3.0-or-later"
 
   head "https://github.com/kkersey/remedy.git", branch: "main"
