@@ -3,11 +3,50 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#define _XOPEN_SOURCE 700
+
 #include "table_layout.h"
 
 #include <cmark-gfm-extension_api.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
+
+static int display_width(const char *text)
+{
+    if (!text) {
+        return 0;
+    }
+
+    int width  = 0;
+    size_t len = strlen(text);
+    size_t i   = 0;
+
+    while (i < len) {
+        unsigned char c = (unsigned char) text[i];
+        if (c < 0x80) {
+            width++;
+            i++;
+        } else {
+            wchar_t wc;
+            mbstate_t state;
+            memset(&state, 0, sizeof(state));
+            size_t consumed = mbrtowc(&wc, text + i, len - i, &state);
+            if (consumed == (size_t) -1 || consumed == (size_t) -2) {
+                width++;
+                i++;
+            } else {
+                int w = wcwidth(wc);
+                if (w > 0) {
+                    width += w;
+                }
+                i += consumed;
+            }
+        }
+    }
+
+    return width;
+}
 
 #define MAX_COLUMNS   64
 #define MIN_COL_WIDTH 3
@@ -151,10 +190,10 @@ static void emit_data_row(line_buffer_t *buf,
     rendered_line_append_span(line, &border_span);
 
     for (int c = 0; c < num_cols; c++) {
-        const char *text = (cells && cells[c]) ? cells[c] : "";
-        int text_len     = (int) strlen(text);
-        int width        = col_widths[c];
-        int padding      = width - text_len;
+        const char *text    = (cells && cells[c]) ? cells[c] : "";
+        int text_disp_width = display_width(text);
+        int width           = col_widths[c];
+        int padding         = width - text_disp_width;
 
         if (padding < 0) {
             padding = 0;
@@ -177,19 +216,21 @@ static void emit_data_row(line_buffer_t *buf,
                 break;
         }
 
-        /* Build padded cell content */
-        size_t cell_buf_len = (size_t) (pad_left + text_len + pad_right + 1);
-        if (cell_buf_len < (size_t) width + 1) {
-            cell_buf_len = (size_t) width + 1;
-        }
-        char *cell_buf = malloc(cell_buf_len + 1);
+        /* Build padded cell content: left_spaces + text + right_spaces */
+        size_t text_bytes   = strlen(text);
+        size_t cell_buf_len = (size_t) pad_left + text_bytes + (size_t) pad_right + 1;
+        char *cell_buf      = malloc(cell_buf_len + 1);
         if (cell_buf) {
-            memset(cell_buf, ' ', cell_buf_len);
-
-            /* Truncate text if it exceeds column width */
-            int copy_len = text_len > width ? width : text_len;
-            memcpy(cell_buf + pad_left, text, (size_t) copy_len);
-            cell_buf[pad_left + copy_len + pad_right] = '\0';
+            size_t pos = 0;
+            for (int p = 0; p < pad_left; p++) {
+                cell_buf[pos++] = ' ';
+            }
+            memcpy(cell_buf + pos, text, text_bytes);
+            pos += text_bytes;
+            for (int p = 0; p < pad_right; p++) {
+                cell_buf[pos++] = ' ';
+            }
+            cell_buf[pos] = '\0';
 
             style_flags_t style = is_header ? STYLE_BOLD : STYLE_NORMAL;
             color_id_t color    = is_header ? COLOR_HEADING3 : COLOR_NORMAL;
@@ -271,9 +312,9 @@ int table_layout_render(cmark_node *table_node, int indent, int terminal_width, 
     for (r = 0; r < num_rows; r++) {
         for (int c = 0; c < num_cols; c++) {
             if (rows_text[r] && rows_text[r][c]) {
-                int len = (int) strlen(rows_text[r][c]);
-                if (len > col_widths[c]) {
-                    col_widths[c] = len;
+                int dw = display_width(rows_text[r][c]);
+                if (dw > col_widths[c]) {
+                    col_widths[c] = dw;
                 }
             }
         }
