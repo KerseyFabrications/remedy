@@ -100,7 +100,7 @@ static void draw_status_bar(pager_state_t *state)
                  health);
     }
 
-    const char *hints = "q:quit  /:search  t:toc  D:diagnose  h:help";
+    const char *hints = "q:quit  /:search  t:toc  D:diagnose  r:reload  h:help";
     int hints_len     = (int) strlen(hints);
     int left_len      = (int) strlen(left);
 
@@ -672,6 +672,7 @@ void pager_show_help(pager_state_t *state)
         "Features",
         "  t                   Table of contents",
         "  D                   Diagnose markdown",
+        "  r                   Reload document",
         "  Ctrl-L              Redraw screen",
         "  h                   This help screen",
         "  q / ESC             Quit",

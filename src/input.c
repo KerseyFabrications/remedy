@@ -77,6 +77,9 @@ input_action_t input_get_action(void)
         case 'h':
             return ACTION_HELP;
 
+        case 'r':
+            return ACTION_RELOAD;
+
         case 12: /* Ctrl-L */
             return ACTION_REDRAW;
 

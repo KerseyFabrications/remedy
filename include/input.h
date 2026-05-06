@@ -24,6 +24,7 @@ typedef enum {
     ACTION_TOGGLE_TOC,
     ACTION_DIAGNOSE,
     ACTION_HELP,
+    ACTION_RELOAD,
     ACTION_REDRAW,
     ACTION_RESIZE,
 } input_action_t;

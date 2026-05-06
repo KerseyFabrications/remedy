@@ -299,6 +299,54 @@ int main(int argc, char *argv[])
                 pager_draw(&pager);
                 break;
 
+            case ACTION_RELOAD:
+                if (filename) {
+                    char *new_text      = NULL;
+                    size_t new_text_len = 0;
+                    if (md_parser_read_file(filename, &new_text, &new_text_len) == SUCCESS && new_text_len > 0) {
+                        cmark_node *new_doc = md_parser_parse(new_text, new_text_len);
+                        if (new_doc) {
+                            size_t saved_offset = pager.scroll_offset;
+
+                            line_buffer_destroy(&buf);
+                            toc_destroy(&toc);
+                            lint_destroy(&lint);
+                            md_parser_free(doc);
+                            free(text);
+
+                            text     = new_text;
+                            text_len = new_text_len;
+                            doc      = new_doc;
+
+                            line_buffer_init(&buf);
+                            toc_init(&toc);
+                            lint_init(&lint);
+                            lint_check(doc, text, text_len, base_dir, &lint);
+                            renderer_render(doc, pager.term_width, &buf, &toc, base_dir);
+                            renderer_word_wrap(&buf, pager.term_width);
+
+                            pager.buf  = &buf;
+                            pager.toc  = &toc;
+                            pager.lint = &lint;
+                            memset(pager.images_transmitted, 0, sizeof(pager.images_transmitted));
+
+                            if (saved_offset < buf.line_count) {
+                                pager.scroll_offset = saved_offset;
+                            } else if (buf.line_count > 0) {
+                                pager.scroll_offset = buf.line_count - 1;
+                            } else {
+                                pager.scroll_offset = 0;
+                            }
+                        } else {
+                            free(new_text);
+                        }
+                    } else {
+                        free(new_text);
+                    }
+                }
+                pager_draw(&pager);
+                break;
+
             case ACTION_RESIZE:
                 pager_handle_resize(&pager);
                 pager_draw(&pager);
