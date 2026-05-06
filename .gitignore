@@ -6,3 +6,5 @@ remedy
 compile_commands.json
 packaging/*.deb
 packaging/remedy_*/
+wip*.png
+wip*.jpg
