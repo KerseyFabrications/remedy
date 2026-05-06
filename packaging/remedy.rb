@@ -1,9 +1,9 @@
 class Remedy < Formula
   desc "Full-featured markdown pager for modern terminals"
   homepage "https://github.com/kkersey/remedy"
-  # url "https://github.com/kkersey/remedy/archive/refs/tags/v0.1.0.tar.gz"
+  # url "https://github.com/kkersey/remedy/archive/refs/tags/vX.Y.Z.tar.gz"
   # sha256 "UPDATE_WITH_ACTUAL_SHA256"
-  version "0.3.0"
+  # version is derived from the tag or CMakeLists.txt
   license "GPL-3.0-or-later"
 
   head "https://github.com/kkersey/remedy.git", branch: "main"

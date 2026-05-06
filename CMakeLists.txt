@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(remedy C)
+project(remedy VERSION 0.3.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -38,6 +38,7 @@ set(SOURCES
 
 # Create executable
 add_executable(remedy ${SOURCES})
+target_compile_definitions(remedy PRIVATE REMEDY_VERSION="${PROJECT_VERSION}")
 
 # Link libraries
 target_link_libraries(remedy

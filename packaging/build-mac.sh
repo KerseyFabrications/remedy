@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-VERSION="0.3.0"
+VERSION="$(grep 'project(remedy VERSION' "$PROJECT_DIR/CMakeLists.txt" | sed 's/.*VERSION \([^ ]*\).*/\1/')"
 
 echo "=== Building remedy ${VERSION} for macOS ==="
 

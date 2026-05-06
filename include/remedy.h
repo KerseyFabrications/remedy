@@ -10,9 +10,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define SUCCESS        0
-#define FAILURE        1
+#define SUCCESS 0
+#define FAILURE 1
 
-#define REMEDY_VERSION "0.3.0"
+/* REMEDY_VERSION is defined by CMake via -D flag */
 
 #endif /* REMEDY_H */
