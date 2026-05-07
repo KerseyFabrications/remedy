@@ -3,11 +3,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#define _XOPEN_SOURCE 700
+
 #include "syntax_highlight.h"
 
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 typedef struct {
     const char *name;
@@ -404,13 +407,34 @@ highlight_line(const char *line_text, size_t line_len, const language_def_t *lan
 static int measure_line_display_width(const char *text, size_t len)
 {
     int width = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (text[i] == '\t') {
+    size_t i  = 0;
+
+    while (i < len) {
+        unsigned char c = (unsigned char) text[i];
+        if (c == '\t') {
             width += 4 - (width % 4);
-        } else {
+            i++;
+        } else if (c < 0x80) {
             width++;
+            i++;
+        } else {
+            wchar_t wc;
+            mbstate_t state;
+            memset(&state, 0, sizeof(state));
+            size_t consumed = mbrtowc(&wc, text + i, len - i, &state);
+            if (consumed == (size_t) -1 || consumed == (size_t) -2) {
+                width++;
+                i++;
+            } else {
+                int w = wcwidth(wc);
+                if (w > 0) {
+                    width += w;
+                }
+                i += consumed;
+            }
         }
     }
+
     return width;
 }
 
