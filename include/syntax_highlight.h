@@ -21,6 +21,6 @@
  * @param buf Line buffer to append highlighted lines to
  * @return SUCCESS or FAILURE
  */
-int syntax_highlight_render(const char *code, const char *language, int indent, line_buffer_t *buf);
+int syntax_highlight_render(const char *code, const char *language, int indent, int available_width, line_buffer_t *buf);
 
 #endif /* SYNTAX_HIGHLIGHT_H */

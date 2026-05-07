@@ -445,7 +445,7 @@ static void pad_line_to_width(rendered_line_t *rline, int current_width, int blo
     }
 }
 
-int syntax_highlight_render(const char *code, const char *language, int indent, line_buffer_t *buf)
+int syntax_highlight_render(const char *code, const char *language, int indent, int available_width, line_buffer_t *buf)
 {
     if (!code || !buf) {
         return FAILURE;
@@ -471,6 +471,9 @@ int syntax_highlight_render(const char *code, const char *language, int indent, 
     }
 
     int block_width = max_width + CODE_PAD_LEFT + CODE_PAD_RIGHT;
+    if (available_width > 0 && block_width > available_width - indent) {
+        block_width = available_width - indent;
+    }
 
     const language_def_t *lang = find_language(language);
 

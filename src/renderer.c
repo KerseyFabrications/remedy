@@ -224,7 +224,7 @@ static void handle_node_enter(render_context_t *ctx, cmark_node *node, cmark_nod
             const char *fence_info = cmark_node_get_fence_info(node);
             if (literal) {
                 finalize_line(ctx);
-                syntax_highlight_render(literal, fence_info, ctx->indent + 2, ctx->buf);
+                syntax_highlight_render(literal, fence_info, ctx->indent + 2, ctx->terminal_width, ctx->buf);
                 ctx->current_line = NULL;
             }
             break;
@@ -701,12 +701,24 @@ int renderer_word_wrap(line_buffer_t *buf, int terminal_width)
             available_width = 10;
         }
 
+        /* Skip wrapping for code block lines — they should truncate, not wrap */
+        bool is_code = false;
+        if (line->span_count > 0) {
+            is_code = true;
+            for (size_t s = 0; s < line->span_count; s++) {
+                if (!(line->spans[s].style & STYLE_CODE)) {
+                    is_code = false;
+                    break;
+                }
+            }
+        }
+
         int total_width = 0;
         for (size_t s = 0; s < line->span_count; s++) {
             total_width += line->spans[s].display_width;
         }
 
-        if (total_width <= available_width) {
+        if (is_code || total_width <= available_width) {
             rendered_line_t *out_line = line_buffer_append_line(&out);
             if (out_line) {
                 *out_line = *line;
