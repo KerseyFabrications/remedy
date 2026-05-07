@@ -13,6 +13,7 @@ All notable changes to remedy are documented here.
 
 ### Changed
 - Version is now defined once in CMakeLists.txt — no more updating 5 files per release
+- Status bar falls back to `h:help` when full key hints don't fit narrow terminals
 
 ## 0.2.1 (2026-05-05)
 

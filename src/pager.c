@@ -100,15 +100,20 @@ static void draw_status_bar(pager_state_t *state)
                  health);
     }
 
-    const char *hints = "q:quit  /:search  t:toc  D:diagnose  r:reload  h:help";
-    int hints_len     = (int) strlen(hints);
-    int left_len      = (int) strlen(left);
+    const char *hints_full  = "q:quit  /:search  t:toc  D:diagnose  r:reload  h:help";
+    const char *hints_short = "h:help";
+    int left_len            = (int) strlen(left);
 
     mvaddnstr(y, 0, left, state->term_width);
 
-    /* Right-align help hints if there's room */
-    if (left_len + hints_len + 2 < state->term_width) {
-        mvaddnstr(y, state->term_width - hints_len - 1, hints, hints_len);
+    /* Right-align help hints; fall back to short version on narrow terminals */
+    int full_len  = (int) strlen(hints_full);
+    int short_len = (int) strlen(hints_short);
+
+    if (left_len + full_len + 2 < state->term_width) {
+        mvaddnstr(y, state->term_width - full_len - 1, hints_full, full_len);
+    } else if (left_len + short_len + 2 < state->term_width) {
+        mvaddnstr(y, state->term_width - short_len - 1, hints_short, short_len);
     }
 
     attroff(COLOR_PAIR(COLOR_STATUS_BAR));
