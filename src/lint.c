@@ -238,6 +238,15 @@ static void check_code_blocks(cmark_node *doc, lint_results_t *results)
         if (!literal || !literal[0]) {
             lint_add(results, LINT_WARNING, line, "Empty code block");
         }
+
+        if (literal) {
+            for (const char *p = literal; *p; p++) {
+                if ((unsigned char) p[0] == 0xE2 && p[1] && (unsigned char) p[1] == 0x94) {
+                    lint_add(results, LINT_WARNING, line, "Code block contains box-drawing characters (consider a markdown table)");
+                    break;
+                }
+            }
+        }
     }
 
     cmark_iter_free(iter);

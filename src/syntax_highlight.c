@@ -445,10 +445,61 @@ static void pad_line_to_width(rendered_line_t *rline, int current_width, int blo
     }
 }
 
+static bool contains_box_drawing(const char *text)
+{
+    if (!text) {
+        return false;
+    }
+    /* Box-drawing characters are in Unicode block U+2500-U+257F, UTF-8: 0xE2 0x94 0x80-0xBF */
+    for (const char *p = text; *p; p++) {
+        if ((unsigned char) p[0] == 0xE2 && p[1] && (unsigned char) p[1] == 0x94) {
+            return true;
+        }
+        /* Also check U+2580-U+259F block (block elements): 0xE2 0x96 */
+        if ((unsigned char) p[0] == 0xE2 && p[1] && (unsigned char) p[1] == 0x96) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void render_diagram_block(const char *code, int indent, line_buffer_t *buf)
+{
+    const char *line_start = code;
+    while (*line_start) {
+        const char *line_end = strchr(line_start, '\n');
+        if (!line_end) {
+            line_end = line_start + strlen(line_start);
+        }
+
+        size_t line_len        = (size_t) (line_end - line_start);
+        rendered_line_t *rline = line_buffer_append_line(buf);
+        if (rline) {
+            rline->indent = indent;
+            if (line_len > 0) {
+                char *text = strndup(line_start, line_len);
+                if (text) {
+                    styled_span_t span = styled_span_create(text, STYLE_CODE, COLOR_NORMAL);
+                    rendered_line_append_span(rline, &span);
+                    free(text);
+                }
+            }
+        }
+
+        line_start = (*line_end == '\n') ? line_end + 1 : line_end;
+    }
+}
+
 int syntax_highlight_render(const char *code, const char *language, int indent, int available_width, line_buffer_t *buf)
 {
     if (!code || !buf) {
         return FAILURE;
+    }
+
+    /* Detect diagram/ASCII art blocks — render verbatim without code block styling */
+    if (contains_box_drawing(code)) {
+        render_diagram_block(code, indent, buf);
+        return SUCCESS;
     }
 
 #define CODE_PAD_LEFT  2
@@ -522,6 +573,13 @@ int syntax_highlight_render(const char *code, const char *language, int indent, 
         /* Add left padding and right padding to the line just added */
         if (buf->line_count > start_idx) {
             rendered_line_t *rline = &buf->lines[buf->line_count - 1];
+
+            /* For empty lines, just pad the full block width */
+            if (line_len == 0) {
+                pad_line_to_width(rline, 0, block_width);
+                line_start = (*line_end == '\n') ? line_end + 1 : line_end;
+                continue;
+            }
 
             /* Insert left padding at the beginning */
             char *left_pad = make_padding(CODE_PAD_LEFT, STYLE_CODE, COLOR_CODE_BLOCK);
