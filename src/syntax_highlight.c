@@ -260,9 +260,16 @@ highlight_line(const char *line_text, size_t line_len, const language_def_t *lan
 
     size_t i = 0;
 
-    /* Continue block comment from previous line */
+    /* Continue block comment from previous line — search within line only */
     if (*in_block_comment && lang->block_comment_end) {
-        const char *end = strstr(line_text, lang->block_comment_end);
+        const char *end       = NULL;
+        size_t end_marker_len = strlen(lang->block_comment_end);
+        for (size_t si = 0; si + end_marker_len <= line_len; si++) {
+            if (strncmp(line_text + si, lang->block_comment_end, end_marker_len) == 0) {
+                end = line_text + si;
+                break;
+            }
+        }
         if (end) {
             size_t comment_len = (size_t) (end - line_text) + strlen(lang->block_comment_end);
             emit_token(rline, line_text, comment_len, TOKEN_COMMENT);
@@ -301,7 +308,18 @@ highlight_line(const char *line_text, size_t line_len, const language_def_t *lan
                 emit_token(rline, line_text + normal_start, i - normal_start, TOKEN_NORMAL);
             }
 
-            const char *end = strstr(line_text + i + strlen(lang->block_comment_start), lang->block_comment_end);
+            /* Only search for close-comment within current line */
+            const char *end          = NULL;
+            const char *search_start = line_text + i + strlen(lang->block_comment_start);
+            size_t search_len        = line_len - (size_t) (search_start - line_text);
+            const char *end_marker   = lang->block_comment_end;
+            size_t end_marker_len    = strlen(end_marker);
+            for (size_t si = 0; si + end_marker_len <= search_len; si++) {
+                if (strncmp(search_start + si, end_marker, end_marker_len) == 0) {
+                    end = search_start + si;
+                    break;
+                }
+            }
             if (end) {
                 size_t comment_len = (size_t) (end - (line_text + i)) + strlen(lang->block_comment_end);
                 emit_token(rline, line_text + i, comment_len, TOKEN_COMMENT);
@@ -613,25 +631,43 @@ int syntax_highlight_render(const char *code, const char *language, int indent, 
                 last_color  = rline->spans[rline->span_count - 1].color;
             }
 
-            /* Insert left padding at the beginning, matching first span's color */
-            char *left_pad = make_padding(CODE_PAD_LEFT, STYLE_CODE, first_color);
-            if (left_pad) {
-                styled_span_t pad_span = styled_span_create(left_pad, STYLE_CODE, first_color);
-                free(left_pad);
-
-                /* Shift existing spans right and insert padding at index 0 */
-                rendered_line_append_span(rline, &pad_span);
-                if (rline->span_count > 1) {
-                    styled_span_t tmp = rline->spans[rline->span_count - 1];
-                    memmove(&rline->spans[1], &rline->spans[0], (rline->span_count - 1) * sizeof(styled_span_t));
-                    rline->spans[0] = tmp;
+            /* Insert left padding at the beginning by rebuilding span array */
+            size_t old_count         = rline->span_count;
+            size_t new_count         = old_count + 1;
+            styled_span_t *new_spans = calloc(new_count + 1, sizeof(styled_span_t));
+            if (new_spans) {
+                char *left_pad = make_padding(CODE_PAD_LEFT, STYLE_CODE, first_color);
+                if (left_pad) {
+                    new_spans[0] = styled_span_create(left_pad, STYLE_CODE, first_color);
+                    free(left_pad);
                 }
+                for (size_t s = 0; s < old_count; s++) {
+                    new_spans[s + 1] = rline->spans[s];
+                }
+                free(rline->spans);
+                rline->spans         = new_spans;
+                rline->span_count    = new_count;
+                rline->span_capacity = new_count + 1;
             }
 
             /* Calculate current content width */
             int content_width = 0;
             for (size_t s = 0; s < rline->span_count; s++) {
                 content_width += rline->spans[s].display_width;
+            }
+
+            {
+                FILE *f = fopen("/tmp/remedy-debug.log", "a");
+                if (f) {
+                    fprintf(f,
+                            "  LINE len=%3zu cw=%3d bw=%3d rpad=%3d spans=%zu\n",
+                            line_len,
+                            content_width,
+                            block_width,
+                            block_width - content_width,
+                            rline->span_count);
+                    fclose(f);
+                }
             }
 
             /* Right-pad to block width, matching last span's color */
