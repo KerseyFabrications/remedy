@@ -13,11 +13,19 @@ set(CMAKE_C_FLAGS_RELEASE "-O2")
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(NCURSESW REQUIRED ncursesw)
 pkg_check_modules(CMARK_GFM REQUIRED libcmark-gfm)
+pkg_check_modules(CMARK_GFM_EXT libcmark-gfm-extensions)
 
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${NCURSESW_INCLUDE_DIRS})
 include_directories(${CMARK_GFM_INCLUDE_DIRS})
+if(CMARK_GFM_EXT_FOUND)
+    include_directories(${CMARK_GFM_EXT_INCLUDE_DIRS})
+endif()
+# Older distros put extension headers in a subdirectory
+if(EXISTS "/usr/include/cmark-gfm")
+    include_directories(/usr/include/cmark-gfm)
+endif()
 
 # Source files
 set(SOURCES

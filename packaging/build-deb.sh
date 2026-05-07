@@ -18,7 +18,7 @@ for dep in cmake pkg-config gcc; do
     fi
 done
 
-for lib in libcmark-gfm-dev libncurses-dev; do
+for lib in libcmark-gfm-dev libcmark-gfm-extensions-dev libncurses-dev; do
     if ! dpkg -s "$lib" &>/dev/null 2>&1; then
         echo "Error: $lib is required. Install with: sudo apt-get install $lib"
         exit 1
@@ -49,9 +49,18 @@ mkdir -p "${PKG_DIR}/usr/share/man/man1"
 cp "${PROJECT_DIR}/man/remedy.1" "${PKG_DIR}/usr/share/man/man1/remedy.1"
 gzip -9 "${PKG_DIR}/usr/share/man/man1/remedy.1"
 
-# Get dependency library versions
-CMARK_VER=$(dpkg -s libcmark-gfm0.29.0.gfm.6 2>/dev/null | grep '^Version:' | cut -d' ' -f2 || echo "")
-NCURSES_VER=$(dpkg -s libncursesw6 2>/dev/null | grep '^Version:' | cut -d' ' -f2 || echo "")
+# Detect runtime library package names (varies across Ubuntu versions)
+CMARK_LIB=$(dpkg -l 'libcmark-gfm0*' 2>/dev/null | awk '/^ii/{print $2}' | head -1)
+CMARK_EXT_LIB=$(dpkg -l 'libcmark-gfm-extensions0*' 2>/dev/null | awk '/^ii/{print $2}' | head -1)
+NCURSES_LIB="libncursesw6"
+
+DEPS="${NCURSES_LIB}"
+if [ -n "$CMARK_LIB" ]; then
+    DEPS="${DEPS}, ${CMARK_LIB}"
+fi
+if [ -n "$CMARK_EXT_LIB" ]; then
+    DEPS="${DEPS}, ${CMARK_EXT_LIB}"
+fi
 
 # Control file
 cat > "${PKG_DIR}/DEBIAN/control" << EOF
@@ -60,7 +69,7 @@ Version: ${VERSION}
 Section: text
 Priority: optional
 Architecture: ${ARCH}
-Depends: libcmark-gfm0.29.0.gfm.6, libcmark-gfm-extensions0.29.0.gfm.6, libncursesw6
+Depends: ${DEPS}
 Maintainer: Kris Kersey <kris.kersey@flocksafety.com>
 Homepage: https://github.com/kkersey/remedy
 Description: Full-featured markdown pager for modern Linux terminals
