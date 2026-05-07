@@ -9,7 +9,14 @@ on:
 
 jobs:
   build-linux:
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +37,7 @@ jobs:
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
         with:
-          name: remedy-linux-amd64-deb
+          name: remedy-linux-${{ matrix.arch }}-deb
           path: packaging/*.deb
 
   build-macos:
@@ -77,5 +84,6 @@ jobs:
         with:
           files: |
             artifacts/remedy-linux-amd64-deb/*.deb
+            artifacts/remedy-linux-arm64-deb/*.deb
             artifacts/remedy-macos/*.tar.gz
           generate_release_notes: true
