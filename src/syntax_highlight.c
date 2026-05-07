@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <wchar.h>
 
 typedef struct {
@@ -430,7 +431,7 @@ static int measure_line_display_width(const char *text, size_t len)
     while (i < len) {
         unsigned char c = (unsigned char) text[i];
         if (c == '\t') {
-            width += 4 - (width % 4);
+            width += 8 - (width % 8);
             i++;
         } else if (c < 0x80) {
             width++;
@@ -505,43 +506,11 @@ static bool contains_box_drawing(const char *text)
     return false;
 }
 
-static void render_diagram_block(const char *code, int indent, line_buffer_t *buf)
-{
-    const char *line_start = code;
-    while (*line_start) {
-        const char *line_end = strchr(line_start, '\n');
-        if (!line_end) {
-            line_end = line_start + strlen(line_start);
-        }
-
-        size_t line_len        = (size_t) (line_end - line_start);
-        rendered_line_t *rline = line_buffer_append_line(buf);
-        if (rline) {
-            rline->indent = indent;
-            if (line_len > 0) {
-                char *text = strndup(line_start, line_len);
-                if (text) {
-                    styled_span_t span = styled_span_create(text, STYLE_PREFORMATTED, COLOR_NORMAL);
-                    rendered_line_append_span(rline, &span);
-                    free(text);
-                }
-            }
-        }
-
-        line_start = (*line_end == '\n') ? line_end + 1 : line_end;
-    }
-}
 
 int syntax_highlight_render(const char *code, const char *language, int indent, int available_width, line_buffer_t *buf)
 {
     if (!code || !buf) {
         return FAILURE;
-    }
-
-    /* Detect diagram/ASCII art blocks — render verbatim without code block styling */
-    if (contains_box_drawing(code)) {
-        render_diagram_block(code, indent, buf);
-        return SUCCESS;
     }
 
 #define CODE_PAD_LEFT  2
@@ -568,7 +537,8 @@ int syntax_highlight_render(const char *code, const char *language, int indent, 
         block_width = available_width - indent;
     }
 
-    const language_def_t *lang = find_language(language);
+    /* Diagram/box-drawing blocks get code block styling but no syntax highlighting */
+    const language_def_t *lang = contains_box_drawing(code) ? NULL : find_language(language);
 
     /* Top border: empty line at block width */
     rendered_line_t *top = line_buffer_append_line(buf);
@@ -654,20 +624,6 @@ int syntax_highlight_render(const char *code, const char *language, int indent, 
             int content_width = 0;
             for (size_t s = 0; s < rline->span_count; s++) {
                 content_width += rline->spans[s].display_width;
-            }
-
-            {
-                FILE *f = fopen("/tmp/remedy-debug.log", "a");
-                if (f) {
-                    fprintf(f,
-                            "  LINE len=%3zu cw=%3d bw=%3d rpad=%3d spans=%zu\n",
-                            line_len,
-                            content_width,
-                            block_width,
-                            block_width - content_width,
-                            rline->span_count);
-                    fclose(f);
-                }
             }
 
             /* Right-pad to block width, matching last span's color */

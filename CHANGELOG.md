@@ -2,6 +2,28 @@
 
 All notable changes to remedy are documented here.
 
+## 0.4.0 (2026-05-07)
+
+### Changed
+- Box-drawing diagrams in code blocks now render with proper code block styling (uniform width, padding, background) instead of being unstyled
+- Code block width measurement uses consistent 8-space tab stops (was 4 in syntax highlighter, 8 elsewhere)
+
+### Fixed
+- **Memory safety (critical)**: Word-wrap shallow copy did not null out source spans, risking double-free on code evolution or data loss on OOM
+- **Memory safety (critical)**: Remainder line spans leaked when output buffer allocation failed during word wrap
+- **Memory safety (critical)**: `renderer_strip_continuations` leaked uncopied spans if `rendered_line_append_span` failed mid-loop
+- Word-wrap truncated span always had `display_width = 0` due to nonsensical loop — caused incorrect line width accounting
+- Search highlight spans now copy `link_url` and `heading_level` from the original span — fixes broken hyperlinks and heading rendering in search results
+- Search highlight `display_width` now computed correctly via `styled_span_create` instead of being stale from pre-truncation text
+- `search_clear_highlights` no longer destroys source span text when merge allocation fails — keeps it as a separate span instead
+- Reload path checks `line_buffer_init`/`toc_init`/`lint_init` return values; zeroes structs on failure instead of crashing
+- Partial init cleanup: `line_buffer_destroy` called if `toc_init` fails after `line_buffer_init` succeeds; `base_dir` freed in early exit paths
+- `styled_span_create` handles `strndup` failure — zeroes `text_len` and `display_width` instead of leaving them inconsistent
+- `emit_span` and all word-wrap span-copy loops destroy spans on `rendered_line_append_span` failure instead of leaking
+- Removed leftover debug logging code (was causing segfault due to missing `<stdio.h>` — implicit `fopen` returned `int` cast to `FILE*`)
+- Added `#include <strings.h>` for `strcasecmp` (fixes compiler warning)
+- Block comment syntax highlighting no longer scans past line boundaries via unbounded `strstr` — uses bounded `strncmp` loop within current line
+
 ## 0.3.0 (2026-05-07)
 
 ### Added

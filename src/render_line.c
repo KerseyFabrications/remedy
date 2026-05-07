@@ -129,7 +129,12 @@ styled_span_t styled_span_create(const char *text, style_flags_t style, color_id
     if (text) {
         span.text_len      = strlen(text);
         span.text          = strndup(text, span.text_len);
-        span.display_width = compute_display_width(text, span.text_len);
+        if (span.text) {
+            span.display_width = compute_display_width(text, span.text_len);
+        } else {
+            span.text_len      = 0;
+            span.display_width = 0;
+        }
     }
 
     span.style = style;

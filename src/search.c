@@ -208,12 +208,16 @@ void search_highlight(search_state_t *state, line_buffer_t *buf)
                                 new_spans = tmp;
                             }
 
-                            new_spans[new_span_count] = styled_span_create(span->text + cursor, span->style, span->color);
-                            /* Truncate to pre_len */
-                            free(new_spans[new_span_count].text);
-                            new_spans[new_span_count].text     = strndup(span->text + cursor, pre_len);
-                            new_spans[new_span_count].text_len = pre_len;
-                            new_span_count++;
+                            char *pre_text = strndup(span->text + cursor, pre_len);
+                            if (pre_text) {
+                                new_spans[new_span_count] = styled_span_create(pre_text, span->style, span->color);
+                                free(pre_text);
+                                new_spans[new_span_count].heading_level = span->heading_level;
+                                if (span->link_url) {
+                                    new_spans[new_span_count].link_url = strdup(span->link_url);
+                                }
+                                new_span_count++;
+                            }
                             cursor = match_start_in_span;
                         }
 
@@ -232,12 +236,17 @@ void search_highlight(search_state_t *state, line_buffer_t *buf)
                                 new_spans = tmp;
                             }
 
-                            new_spans[new_span_count] =
-                                styled_span_create(span->text + cursor, span->style | STYLE_SEARCH_HIT, COLOR_SEARCH_HIT);
-                            free(new_spans[new_span_count].text);
-                            new_spans[new_span_count].text     = strndup(span->text + cursor, hl_len);
-                            new_spans[new_span_count].text_len = hl_len;
-                            new_span_count++;
+                            char *hl_text = strndup(span->text + cursor, hl_len);
+                            if (hl_text) {
+                                new_spans[new_span_count] =
+                                    styled_span_create(hl_text, span->style | STYLE_SEARCH_HIT, COLOR_SEARCH_HIT);
+                                free(hl_text);
+                                new_spans[new_span_count].heading_level = span->heading_level;
+                                if (span->link_url) {
+                                    new_spans[new_span_count].link_url = strdup(span->link_url);
+                                }
+                                new_span_count++;
+                            }
                             cursor = hl_end;
                         }
 
@@ -268,14 +277,16 @@ void search_highlight(search_state_t *state, line_buffer_t *buf)
                         new_spans = tmp;
                     }
 
-                    new_spans[new_span_count] = styled_span_create(span->text + cursor, span->style, span->color);
-                    free(new_spans[new_span_count].text);
-                    new_spans[new_span_count].text     = strndup(span->text + cursor, normal_len);
-                    new_spans[new_span_count].text_len = normal_len;
-                    if (span->link_url) {
-                        new_spans[new_span_count].link_url = strdup(span->link_url);
+                    char *normal_text = strndup(span->text + cursor, normal_len);
+                    if (normal_text) {
+                        new_spans[new_span_count] = styled_span_create(normal_text, span->style, span->color);
+                        free(normal_text);
+                        new_spans[new_span_count].heading_level = span->heading_level;
+                        if (span->link_url) {
+                            new_spans[new_span_count].link_url = strdup(span->link_url);
+                        }
+                        new_span_count++;
                     }
-                    new_span_count++;
                     cursor = next_match_in_span;
                 }
             }
@@ -352,8 +363,14 @@ void search_clear_highlights(line_buffer_t *buf)
                     line->spans[write - 1].text     = merged;
                     line->spans[write - 1].text_len = old_len + add_len;
                     line->spans[write - 1].display_width += line->spans[s].display_width;
+                    styled_span_destroy(&line->spans[s]);
+                } else {
+                    /* Merge failed — keep as separate span */
+                    if (write != s) {
+                        line->spans[write] = line->spans[s];
+                    }
+                    write++;
                 }
-                styled_span_destroy(&line->spans[s]);
             } else {
                 if (write != s) {
                     line->spans[write] = line->spans[s];

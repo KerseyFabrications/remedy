@@ -159,10 +159,19 @@ int main(int argc, char *argv[])
     line_buffer_t buf;
     toc_t toc;
 
-    if (line_buffer_init(&buf) != SUCCESS || toc_init(&toc) != SUCCESS) {
+    if (line_buffer_init(&buf) != SUCCESS) {
         fprintf(stderr, "Error: memory allocation failed\n");
         md_parser_free(doc);
         free(text);
+        free(base_dir);
+        return 1;
+    }
+    if (toc_init(&toc) != SUCCESS) {
+        fprintf(stderr, "Error: memory allocation failed\n");
+        line_buffer_destroy(&buf);
+        md_parser_free(doc);
+        free(text);
+        free(base_dir);
         return 1;
     }
 
@@ -318,12 +327,15 @@ int main(int argc, char *argv[])
                             text_len = new_text_len;
                             doc      = new_doc;
 
-                            line_buffer_init(&buf);
-                            toc_init(&toc);
-                            lint_init(&lint);
-                            lint_check(doc, text, text_len, base_dir, &lint);
-                            renderer_render(doc, pager.term_width - PAGER_MARGIN * 2, &buf, &toc, base_dir);
-                            renderer_word_wrap(&buf, pager.term_width - PAGER_MARGIN * 2);
+                            if (line_buffer_init(&buf) != SUCCESS || toc_init(&toc) != SUCCESS || lint_init(&lint) != SUCCESS) {
+                                memset(&buf, 0, sizeof(buf));
+                                memset(&toc, 0, sizeof(toc));
+                                memset(&lint, 0, sizeof(lint));
+                            } else {
+                                lint_check(doc, text, text_len, base_dir, &lint);
+                                renderer_render(doc, pager.term_width - PAGER_MARGIN * 2, &buf, &toc, base_dir);
+                                renderer_word_wrap(&buf, pager.term_width - PAGER_MARGIN * 2);
+                            }
 
                             pager.buf  = &buf;
                             pager.toc  = &toc;

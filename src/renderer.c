@@ -118,7 +118,9 @@ static void emit_span(render_context_t *ctx, const char *text)
         span.link_url = strdup(ctx->stack[ctx->depth - 1].link_url);
     }
 
-    rendered_line_append_span(ctx->current_line, &span);
+    if (rendered_line_append_span(ctx->current_line, &span) != SUCCESS) {
+        styled_span_destroy(&span);
+    }
 }
 
 static void finalize_line(render_context_t *ctx)
@@ -590,6 +592,8 @@ static void wrap_single_line(rendered_line_t *line, int available_width, line_bu
         if (out_line) {
             *out_line = *line;
         }
+        line->spans      = NULL;
+        line->span_count = 0;
         return;
     }
 
@@ -609,25 +613,26 @@ static void wrap_single_line(rendered_line_t *line, int available_width, line_bu
         if (line->spans[s].link_url) {
             copy.link_url = strdup(line->spans[s].link_url);
         }
-        rendered_line_append_span(first, &copy);
+        if (rendered_line_append_span(first, &copy) != SUCCESS) {
+            styled_span_destroy(&copy);
+        }
     }
 
     /* Truncate the break span */
     styled_span_t *break_span = &line->spans[break_span_idx];
     if (break_byte_offset > 0) {
-        styled_span_t truncated = styled_span_create("", break_span->style, break_span->color);
-        free(truncated.text);
-        truncated.text          = strndup(break_span->text, break_byte_offset);
-        truncated.text_len      = break_byte_offset;
-        truncated.display_width = 0;
-        for (size_t s = 0; s < first->span_count; s++) {
-            truncated.display_width = 0;
+        char *trunc_text = strndup(break_span->text, break_byte_offset);
+        if (trunc_text) {
+            styled_span_t truncated = styled_span_create(trunc_text, break_span->style, break_span->color);
+            free(trunc_text);
+            truncated.heading_level = break_span->heading_level;
+            if (break_span->link_url) {
+                truncated.link_url = strdup(break_span->link_url);
+            }
+            if (rendered_line_append_span(first, &truncated) != SUCCESS) {
+                styled_span_destroy(&truncated);
+            }
         }
-        truncated.heading_level = break_span->heading_level;
-        if (break_span->link_url) {
-            truncated.link_url = strdup(break_span->link_url);
-        }
-        rendered_line_append_span(first, &truncated);
     }
 
     /* Build the remainder line */
@@ -644,7 +649,9 @@ static void wrap_single_line(rendered_line_t *line, int available_width, line_bu
         if (break_span->link_url) {
             rem_span.link_url = strdup(break_span->link_url);
         }
-        rendered_line_append_span(&remainder_line, &rem_span);
+        if (rendered_line_append_span(&remainder_line, &rem_span) != SUCCESS) {
+            styled_span_destroy(&rem_span);
+        }
     }
 
     for (size_t s = break_span_idx + 1; s < line->span_count; s++) {
@@ -653,7 +660,9 @@ static void wrap_single_line(rendered_line_t *line, int available_width, line_bu
         if (line->spans[s].link_url) {
             copy.link_url = strdup(line->spans[s].link_url);
         }
-        rendered_line_append_span(&remainder_line, &copy);
+        if (rendered_line_append_span(&remainder_line, &copy) != SUCCESS) {
+            styled_span_destroy(&copy);
+        }
     }
 
     /* Recursively wrap the remainder if still too long */
@@ -669,6 +678,8 @@ static void wrap_single_line(rendered_line_t *line, int available_width, line_bu
         rendered_line_t *out_rem = line_buffer_append_line(out);
         if (out_rem) {
             *out_rem = remainder_line;
+        } else {
+            rendered_line_destroy(&remainder_line);
         }
     }
 
@@ -753,10 +764,14 @@ void renderer_strip_continuations(line_buffer_t *buf)
             rendered_line_t *cont   = &buf->lines[read];
 
             for (size_t s = 0; s < cont->span_count; s++) {
-                rendered_line_append_span(parent, &cont->spans[s]);
+                if (rendered_line_append_span(parent, &cont->spans[s]) != SUCCESS) {
+                    for (size_t r = s; r < cont->span_count; r++) {
+                        styled_span_destroy(&cont->spans[r]);
+                    }
+                    break;
+                }
             }
 
-            /* Spans were shallow-copied to parent; just free the array */
             free(cont->spans);
             cont->spans         = NULL;
             cont->span_count    = 0;
