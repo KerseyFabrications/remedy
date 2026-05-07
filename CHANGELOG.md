@@ -2,7 +2,14 @@
 
 All notable changes to remedy are documented here.
 
-## 0.3.0 (2026-05-06)
+## 0.3.0 (2026-05-07)
+
+### Added
+- Document reload with `r` key — re-reads file from disk, preserving scroll position
+- 1-character left/right margins for readability in split terminals
+- Table cell word-wrap — long cell content wraps across multiple display lines
+- Horizontal separator lines between table data rows
+- Proportional column width distribution for tables that exceed terminal width
 
 ### Changed
 - Version is now defined once in CMakeLists.txt — no more updating 5 files per release
