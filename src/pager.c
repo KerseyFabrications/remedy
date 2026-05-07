@@ -26,7 +26,9 @@ static void draw_span(WINDOW *win, const styled_span_t *span)
     if (span->style & STYLE_STRIKETHROUGH) {
         attrs |= A_DIM;
     }
-    /* STYLE_CODE uses explicit background colors, not A_REVERSE */
+    if (span->style & STYLE_CODE) {
+        attrs |= A_REVERSE;
+    }
     if (span->style & STYLE_LINK) {
         attrs |= A_UNDERLINE;
     }
@@ -129,7 +131,7 @@ void pager_init_colors(void)
     init_pair(COLOR_HEADING4, COLOR_YELLOW, -1);
     init_pair(COLOR_HEADING5, COLOR_BLUE, -1);
     init_pair(COLOR_HEADING6, COLOR_WHITE, -1);
-    init_pair(COLOR_CODE, COLOR_YELLOW, COLOR_BLACK);
+    init_pair(COLOR_CODE, COLOR_YELLOW, -1);
     init_pair(COLOR_CODE_BLOCK, COLOR_WHITE, COLOR_BLACK);
     init_pair(COLOR_BLOCKQUOTE, COLOR_CYAN, -1);
     init_pair(COLOR_LINK, COLOR_BLUE, -1);
@@ -139,13 +141,13 @@ void pager_init_colors(void)
     init_pair(COLOR_SEARCH_HIT, COLOR_BLACK, COLOR_YELLOW);
     init_pair(COLOR_LIST_BULLET, COLOR_CYAN, -1);
     init_pair(COLOR_STATUS_BAR, COLOR_BLACK, COLOR_WHITE);
-    init_pair(COLOR_SYN_KEYWORD, COLOR_MAGENTA, COLOR_BLACK);
-    init_pair(COLOR_SYN_STRING, COLOR_GREEN, COLOR_BLACK);
-    init_pair(COLOR_SYN_COMMENT, COLOR_CYAN, COLOR_BLACK);
-    init_pair(COLOR_SYN_NUMBER, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(COLOR_SYN_TYPE, COLOR_GREEN, COLOR_BLACK);
-    init_pair(COLOR_SYN_FUNCTION, COLOR_BLUE, COLOR_BLACK);
-    init_pair(COLOR_SYN_PREPROC, COLOR_RED, COLOR_BLACK);
+    init_pair(COLOR_SYN_KEYWORD, COLOR_MAGENTA, -1);
+    init_pair(COLOR_SYN_STRING, COLOR_GREEN, -1);
+    init_pair(COLOR_SYN_COMMENT, COLOR_CYAN, -1);
+    init_pair(COLOR_SYN_NUMBER, COLOR_YELLOW, -1);
+    init_pair(COLOR_SYN_TYPE, COLOR_GREEN, -1);
+    init_pair(COLOR_SYN_FUNCTION, COLOR_BLUE, -1);
+    init_pair(COLOR_SYN_PREPROC, COLOR_RED, -1);
 }
 
 int pager_init(pager_state_t *state, line_buffer_t *buf, toc_t *toc, const char *filename)
