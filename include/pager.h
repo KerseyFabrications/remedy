@@ -10,6 +10,7 @@
 #include "render_line.h"
 #include "search.h"
 
+#define PAGER_MARGIN       1
 #define MAX_TRACKED_IMAGES 64
 
 typedef struct {

@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    ret = renderer_render(doc, term_width, &buf, &toc, base_dir);
+    ret = renderer_render(doc, term_width - PAGER_MARGIN * 2, &buf, &toc, base_dir);
     if (ret != SUCCESS) {
         fprintf(stderr, "Error: rendering failed\n");
         line_buffer_destroy(&buf);
@@ -176,7 +176,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    renderer_word_wrap(&buf, term_width);
+    renderer_word_wrap(&buf, term_width - PAGER_MARGIN * 2);
 
     /* For stdin pipe mode, reopen /dev/tty for ncurses input */
     FILE *tty_fp = NULL;
@@ -322,8 +322,8 @@ int main(int argc, char *argv[])
                             toc_init(&toc);
                             lint_init(&lint);
                             lint_check(doc, text, text_len, base_dir, &lint);
-                            renderer_render(doc, pager.term_width, &buf, &toc, base_dir);
-                            renderer_word_wrap(&buf, pager.term_width);
+                            renderer_render(doc, pager.term_width - PAGER_MARGIN * 2, &buf, &toc, base_dir);
+                            renderer_word_wrap(&buf, pager.term_width - PAGER_MARGIN * 2);
 
                             pager.buf  = &buf;
                             pager.toc  = &toc;

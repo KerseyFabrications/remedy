@@ -187,16 +187,16 @@ void pager_draw(pager_state_t *state)
         size_t line_idx = state->scroll_offset + (size_t) row;
 
         if (line_idx >= state->buf->line_count) {
-            mvaddch(row, 0, '~');
+            mvaddch(row, PAGER_MARGIN, '~');
             continue;
         }
 
         rendered_line_t *line = &state->buf->lines[line_idx];
 
-        move(row, 0);
+        move(row, PAGER_MARGIN);
 
         /* Draw indent */
-        int col = 0;
+        int col = PAGER_MARGIN;
         if (line->indent > 0) {
             bool is_blockquote = false;
             for (size_t s = 0; s < line->span_count; s++) {
@@ -225,7 +225,7 @@ void pager_draw(pager_state_t *state)
 
         /* Draw spans (skip image marker lines starting with \x01) */
         for (size_t s = 0; s < line->span_count; s++) {
-            if (col >= state->term_width) {
+            if (col >= state->term_width - PAGER_MARGIN) {
                 break;
             }
             if (line->spans[s].text && line->spans[s].text[0] == '\x01') {
@@ -251,7 +251,7 @@ void pager_draw(pager_state_t *state)
         }
 
         rendered_line_t *line = &state->buf->lines[line_idx];
-        int col               = line->indent;
+        int col               = line->indent + PAGER_MARGIN;
 
         for (size_t s = 0; s < line->span_count; s++) {
             styled_span_t *span = &line->spans[s];
@@ -325,7 +325,7 @@ void pager_draw(pager_state_t *state)
             int image_id         = (int) (line_idx % MAX_TRACKED_IMAGES) + 1;
             int idx              = image_id - 1;
 
-            printf("\033[%d;%dH", row + 1, line->indent + 1);
+            printf("\033[%d;%dH", row + 1, line->indent + PAGER_MARGIN + 1);
 
             if (!state->images_transmitted[idx]) {
                 int actual_cols = 0;
@@ -406,7 +406,7 @@ void pager_handle_resize(pager_state_t *state)
     getmaxyx(stdscr, state->term_height, state->term_width);
 
     renderer_strip_continuations(state->buf);
-    renderer_word_wrap(state->buf, state->term_width);
+    renderer_word_wrap(state->buf, state->term_width - PAGER_MARGIN * 2);
 
     /* Force image retransmission since dimensions changed */
     memset(state->images_transmitted, 0, sizeof(state->images_transmitted));
