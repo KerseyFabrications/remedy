@@ -171,6 +171,87 @@ static void emit_border_line(line_buffer_t *buf,
     free(border);
 }
 
+/* Word-wrap text into lines of max_width display columns. Returns array of strdup'd lines. */
+static char **wrap_cell_text(const char *text, int max_width, int *out_line_count)
+{
+    if (!text || max_width < 1) {
+        *out_line_count = 1;
+        char **lines    = calloc(1, sizeof(char *));
+        if (lines) {
+            lines[0] = strdup("");
+        }
+        return lines;
+    }
+
+    int cap      = 8;
+    int count    = 0;
+    char **lines = calloc((size_t) cap, sizeof(char *));
+    if (!lines) {
+        *out_line_count = 0;
+        return NULL;
+    }
+
+    size_t len = strlen(text);
+    size_t pos = 0;
+
+    while (pos <= len) {
+        if (pos == len) {
+            if (count == 0) {
+                lines[count++] = strdup("");
+            }
+            break;
+        }
+
+        int col           = 0;
+        size_t line_start = pos;
+        size_t last_space = pos;
+        bool found_space  = false;
+        size_t end        = pos;
+
+        while (end < len && col < max_width) {
+            if (text[end] == ' ') {
+                last_space  = end;
+                found_space = true;
+            }
+            col++;
+            end++;
+        }
+
+        size_t break_at;
+        if (end >= len) {
+            break_at = len;
+        } else if (found_space && last_space > line_start) {
+            break_at = last_space;
+        } else {
+            break_at = end;
+        }
+
+        if (count >= cap) {
+            cap *= 2;
+            char **tmp = realloc(lines, (size_t) cap * sizeof(char *));
+            if (!tmp) {
+                break;
+            }
+            lines = tmp;
+        }
+
+        lines[count] = strndup(text + line_start, break_at - line_start);
+        count++;
+
+        pos = break_at;
+        if (pos < len && text[pos] == ' ') {
+            pos++;
+        }
+    }
+
+    *out_line_count = count > 0 ? count : 1;
+    if (count == 0) {
+        lines[0]        = strdup("");
+        *out_line_count = 1;
+    }
+    return lines;
+}
+
 static void emit_data_row(line_buffer_t *buf,
                           int indent,
                           char **cells,
@@ -179,76 +260,106 @@ static void emit_data_row(line_buffer_t *buf,
                           const col_align_t *alignments,
                           bool is_header)
 {
-    rendered_line_t *line = line_buffer_append_line(buf);
-    if (!line) {
+    /* Word-wrap each cell and find max line count for this row */
+    char ***wrapped  = calloc((size_t) num_cols, sizeof(char **));
+    int *wrap_counts = calloc((size_t) num_cols, sizeof(int));
+    if (!wrapped || !wrap_counts) {
+        free(wrapped);
+        free(wrap_counts);
         return;
     }
-    line->indent = indent;
 
-    /* Left border */
-    styled_span_t border_span = styled_span_create("\xe2\x94\x82 ", STYLE_TABLE_BORDER, COLOR_TABLE_BORDER);
-    rendered_line_append_span(line, &border_span);
-
+    int max_lines = 1;
     for (int c = 0; c < num_cols; c++) {
-        const char *text    = (cells && cells[c]) ? cells[c] : "";
-        int text_disp_width = display_width(text);
-        int width           = col_widths[c];
-        int padding         = width - text_disp_width;
-
-        if (padding < 0) {
-            padding = 0;
-        }
-
-        int pad_left  = 0;
-        int pad_right = 0;
-
-        switch (alignments[c]) {
-            case ALIGN_RIGHT:
-                pad_left = padding;
-                break;
-            case ALIGN_CENTER:
-                pad_left  = padding / 2;
-                pad_right = padding - pad_left;
-                break;
-            case ALIGN_LEFT:
-            default:
-                pad_right = padding;
-                break;
-        }
-
-        /* Build padded cell content: left_spaces + text + right_spaces */
-        size_t text_bytes   = strlen(text);
-        size_t cell_buf_len = (size_t) pad_left + text_bytes + (size_t) pad_right + 1;
-        char *cell_buf      = malloc(cell_buf_len + 1);
-        if (cell_buf) {
-            size_t pos = 0;
-            for (int p = 0; p < pad_left; p++) {
-                cell_buf[pos++] = ' ';
-            }
-            memcpy(cell_buf + pos, text, text_bytes);
-            pos += text_bytes;
-            for (int p = 0; p < pad_right; p++) {
-                cell_buf[pos++] = ' ';
-            }
-            cell_buf[pos] = '\0';
-
-            style_flags_t style = is_header ? STYLE_BOLD : STYLE_NORMAL;
-            color_id_t color    = is_header ? COLOR_HEADING3 : COLOR_NORMAL;
-
-            styled_span_t cell_span = styled_span_create(cell_buf, style, color);
-            rendered_line_append_span(line, &cell_span);
-            free(cell_buf);
-        }
-
-        /* Column separator or right border */
-        if (c < num_cols - 1) {
-            styled_span_t sep = styled_span_create(" \xe2\x94\x82 ", STYLE_TABLE_BORDER, COLOR_TABLE_BORDER);
-            rendered_line_append_span(line, &sep);
-        } else {
-            styled_span_t sep = styled_span_create(" \xe2\x94\x82", STYLE_TABLE_BORDER, COLOR_TABLE_BORDER);
-            rendered_line_append_span(line, &sep);
+        const char *text = (cells && cells[c]) ? cells[c] : "";
+        wrapped[c]       = wrap_cell_text(text, col_widths[c], &wrap_counts[c]);
+        if (wrap_counts[c] > max_lines) {
+            max_lines = wrap_counts[c];
         }
     }
+
+    style_flags_t cell_style = is_header ? STYLE_BOLD : STYLE_NORMAL;
+    color_id_t cell_color    = is_header ? COLOR_HEADING3 : COLOR_NORMAL;
+
+    /* Emit one display line per wrap line */
+    for (int wl = 0; wl < max_lines; wl++) {
+        rendered_line_t *line = line_buffer_append_line(buf);
+        if (!line) {
+            break;
+        }
+        line->indent = indent;
+
+        styled_span_t border = styled_span_create("\xe2\x94\x82 ", STYLE_TABLE_BORDER, COLOR_TABLE_BORDER);
+        rendered_line_append_span(line, &border);
+
+        for (int c = 0; c < num_cols; c++) {
+            const char *text = (wl < wrap_counts[c] && wrapped[c] && wrapped[c][wl]) ? wrapped[c][wl] : "";
+            int text_dw      = display_width(text);
+            int width        = col_widths[c];
+            int padding      = width - text_dw;
+            if (padding < 0) {
+                padding = 0;
+            }
+
+            int pad_left  = 0;
+            int pad_right = padding;
+
+            if (wl == 0) {
+                switch (alignments[c]) {
+                    case ALIGN_RIGHT:
+                        pad_left  = padding;
+                        pad_right = 0;
+                        break;
+                    case ALIGN_CENTER:
+                        pad_left  = padding / 2;
+                        pad_right = padding - pad_left;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            size_t text_bytes   = strlen(text);
+            size_t cell_buf_len = (size_t) pad_left + text_bytes + (size_t) pad_right + 1;
+            char *cell_buf      = malloc(cell_buf_len + 1);
+            if (cell_buf) {
+                size_t p = 0;
+                for (int i = 0; i < pad_left; i++) {
+                    cell_buf[p++] = ' ';
+                }
+                memcpy(cell_buf + p, text, text_bytes);
+                p += text_bytes;
+                for (int i = 0; i < pad_right; i++) {
+                    cell_buf[p++] = ' ';
+                }
+                cell_buf[p] = '\0';
+
+                styled_span_t cell_span = styled_span_create(cell_buf, cell_style, cell_color);
+                rendered_line_append_span(line, &cell_span);
+                free(cell_buf);
+            }
+
+            if (c < num_cols - 1) {
+                styled_span_t sep = styled_span_create(" \xe2\x94\x82 ", STYLE_TABLE_BORDER, COLOR_TABLE_BORDER);
+                rendered_line_append_span(line, &sep);
+            } else {
+                styled_span_t sep = styled_span_create(" \xe2\x94\x82", STYLE_TABLE_BORDER, COLOR_TABLE_BORDER);
+                rendered_line_append_span(line, &sep);
+            }
+        }
+    }
+
+    /* Free wrapped text */
+    for (int c = 0; c < num_cols; c++) {
+        if (wrapped[c]) {
+            for (int wl = 0; wl < wrap_counts[c]; wl++) {
+                free(wrapped[c][wl]);
+            }
+            free(wrapped[c]);
+        }
+    }
+    free(wrapped);
+    free(wrap_counts);
 }
 
 int table_layout_render(cmark_node *table_node, int indent, int terminal_width, line_buffer_t *buf)
@@ -330,27 +441,25 @@ int table_layout_render(cmark_node *table_node, int indent, int terminal_width, 
     /* Constrain total width to terminal */
     int available = terminal_width - indent;
     /* Each col takes: col_width + 3 (padding + border), plus 1 for left border */
-    int total_width = 1;
-    for (int c = 0; c < num_cols; c++) {
-        total_width += col_widths[c] + 3;
+    int overhead      = num_cols * 3 + 1;
+    int content_avail = available - overhead;
+    if (content_avail < num_cols * MIN_COL_WIDTH) {
+        content_avail = num_cols * MIN_COL_WIDTH;
     }
 
-    if (total_width > available && available > num_cols * (MIN_COL_WIDTH + 3) + 1) {
-        int excess = total_width - available;
-        while (excess > 0) {
-            int widest     = 0;
-            int widest_idx = 0;
-            for (int c = 0; c < num_cols; c++) {
-                if (col_widths[c] > widest) {
-                    widest     = col_widths[c];
-                    widest_idx = c;
-                }
+    int total_content = 0;
+    for (int c = 0; c < num_cols; c++) {
+        total_content += col_widths[c];
+    }
+
+    if (total_content > content_avail) {
+        /* Proportional distribution: each column gets its share of available space */
+        for (int c = 0; c < num_cols; c++) {
+            int proportional = (int) ((double) col_widths[c] / (double) total_content * (double) content_avail);
+            if (proportional < MIN_COL_WIDTH) {
+                proportional = MIN_COL_WIDTH;
             }
-            if (widest <= MIN_COL_WIDTH) {
-                break;
-            }
-            col_widths[widest_idx]--;
-            excess--;
+            col_widths[c] = proportional;
         }
     }
 
