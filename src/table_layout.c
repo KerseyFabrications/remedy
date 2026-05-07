@@ -492,8 +492,11 @@ int table_layout_render(cmark_node *table_node, int indent, int terminal_width, 
         emit_border_line(buf, indent, col_widths, num_cols, mid_left, mid_mid, mid_right, horiz);
     }
 
-    /* Data rows */
+    /* Data rows with separator lines between them */
     for (r = 1; r < num_rows; r++) {
+        if (r > 1) {
+            emit_border_line(buf, indent, col_widths, num_cols, mid_left, mid_mid, mid_right, horiz);
+        }
         emit_data_row(buf, indent, rows_text[r], num_cols, col_widths, alignments, false);
     }
 
