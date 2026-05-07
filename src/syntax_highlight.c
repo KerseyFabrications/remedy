@@ -479,7 +479,7 @@ static void render_diagram_block(const char *code, int indent, line_buffer_t *bu
             if (line_len > 0) {
                 char *text = strndup(line_start, line_len);
                 if (text) {
-                    styled_span_t span = styled_span_create(text, STYLE_CODE, COLOR_NORMAL);
+                    styled_span_t span = styled_span_create(text, STYLE_PREFORMATTED, COLOR_NORMAL);
                     rendered_line_append_span(rline, &span);
                     free(text);
                 }
@@ -581,10 +581,18 @@ int syntax_highlight_render(const char *code, const char *language, int indent, 
                 continue;
             }
 
-            /* Insert left padding at the beginning */
-            char *left_pad = make_padding(CODE_PAD_LEFT, STYLE_CODE, COLOR_CODE_BLOCK);
+            /* Determine colors from content spans for consistent padding */
+            color_id_t first_color = COLOR_CODE_BLOCK;
+            color_id_t last_color  = COLOR_CODE_BLOCK;
+            if (rline->span_count > 0) {
+                first_color = rline->spans[0].color;
+                last_color  = rline->spans[rline->span_count - 1].color;
+            }
+
+            /* Insert left padding at the beginning, matching first span's color */
+            char *left_pad = make_padding(CODE_PAD_LEFT, STYLE_CODE, first_color);
             if (left_pad) {
-                styled_span_t pad_span = styled_span_create(left_pad, STYLE_CODE, COLOR_CODE_BLOCK);
+                styled_span_t pad_span = styled_span_create(left_pad, STYLE_CODE, first_color);
                 free(left_pad);
 
                 /* Shift existing spans right and insert padding at index 0 */
@@ -602,8 +610,16 @@ int syntax_highlight_render(const char *code, const char *language, int indent, 
                 content_width += rline->spans[s].display_width;
             }
 
-            /* Right-pad to block width */
-            pad_line_to_width(rline, content_width, block_width);
+            /* Right-pad to block width, matching last span's color */
+            int right_pad = block_width - content_width;
+            if (right_pad > 0) {
+                char *pad = make_padding(right_pad, STYLE_CODE, last_color);
+                if (pad) {
+                    styled_span_t span = styled_span_create(pad, STYLE_CODE, last_color);
+                    rendered_line_append_span(rline, &span);
+                    free(pad);
+                }
+            }
         }
 
         line_start = (*line_end == '\n') ? line_end + 1 : line_end;

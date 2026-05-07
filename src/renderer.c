@@ -701,13 +701,13 @@ int renderer_word_wrap(line_buffer_t *buf, int terminal_width)
             available_width = 10;
         }
 
-        /* Skip wrapping for code block lines — they should truncate, not wrap */
-        bool is_code = false;
+        /* Skip wrapping for code/preformatted lines — they should truncate, not wrap */
+        bool is_nowrap = false;
         if (line->span_count > 0) {
-            is_code = true;
+            is_nowrap = true;
             for (size_t s = 0; s < line->span_count; s++) {
-                if (!(line->spans[s].style & STYLE_CODE)) {
-                    is_code = false;
+                if (!(line->spans[s].style & (STYLE_CODE | STYLE_PREFORMATTED))) {
+                    is_nowrap = false;
                     break;
                 }
             }
@@ -718,7 +718,7 @@ int renderer_word_wrap(line_buffer_t *buf, int terminal_width)
             total_width += line->spans[s].display_width;
         }
 
-        if (is_code || total_width <= available_width) {
+        if (is_nowrap || total_width <= available_width) {
             rendered_line_t *out_line = line_buffer_append_line(&out);
             if (out_line) {
                 *out_line = *line;

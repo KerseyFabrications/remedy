@@ -23,6 +23,7 @@ typedef enum {
     STYLE_LIST_BULLET   = (1 << 8),
     STYLE_HR            = (1 << 9),
     STYLE_TABLE_BORDER  = (1 << 10),
+    STYLE_PREFORMATTED  = (1 << 11),
 } style_flags_t;
 
 typedef enum {
