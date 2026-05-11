@@ -2,6 +2,17 @@
 
 All notable changes to remedy are documented here.
 
+## 0.5.0 (2026-05-11)
+
+### Added
+- Smoke tests in CI: version check, diagnose pass/fail, stdin pipe
+- Homebrew tap for macOS install (`brew tap KerseyFabrications/tap && brew install remedy`)
+- Automated Homebrew formula update on release
+
+### Changed
+- CI triggers on `master` branch (was incorrectly set to `main`)
+- GitHub Actions opted into Node.js 24 ahead of June 2nd forced migration
+
 ## 0.4.0 (2026-05-07)
 
 ### Changed
