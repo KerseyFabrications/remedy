@@ -38,6 +38,13 @@ make -C build -j$(nproc)
 sudo cmake --install build
 ```
 
+### Homebrew (macOS)
+
+```sh
+brew tap KerseyFabrications/tap
+brew install remedy
+```
+
 ### From .deb package
 
 Pre-built `.deb` packages for amd64 and arm64 are available on the [Releases](https://github.com/KerseyFabrications/remedy/releases) page.
