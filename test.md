@@ -10,8 +10,6 @@ This is a test markdown file for the **remedy** pager. It exercises every suppor
 - `Inline code` with backticks
 - ~~Strikethrough~~ with double tildes
 - A [hyperlink to GitHub](https://github.com) with OSC 8 support
-- An image reference: ![Remedy Logo](wip.png)
-- Another image reference: ![Author](wip2.jpg)
 
 ## Ordered Lists
 
