@@ -111,3 +111,65 @@ jobs:
             artifacts/remedy-linux-arm64-deb/*.deb
             artifacts/remedy-macos/*.tar.gz
           generate_release_notes: true
+
+  update-homebrew:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update Homebrew formula
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          TARBALL_URL="https://github.com/KerseyFabrications/remedy/archive/refs/tags/v${VERSION}.tar.gz"
+
+          curl -sL "$TARBALL_URL" -o /tmp/remedy.tar.gz
+          SHA256=$(sha256sum /tmp/remedy.tar.gz | awk '{print $1}')
+
+          FORMULA=$(cat <<RUBY
+          class Remedy < Formula
+            desc "Full-featured less-like markdown pager for modern terminals"
+            homepage "https://github.com/KerseyFabrications/remedy"
+            url "https://github.com/KerseyFabrications/remedy/archive/refs/tags/v${VERSION}.tar.gz"
+            sha256 "${SHA256}"
+            license "GPL-3.0-or-later"
+
+            head "https://github.com/KerseyFabrications/remedy.git", branch: "master"
+
+            depends_on "cmake" => :build
+            depends_on "pkg-config" => :build
+            depends_on "cmark-gfm"
+            depends_on "ncurses"
+
+            def install
+              system "cmake", "-S", ".", "-B", "build", *std_cmake_args
+              system "make", "-C", "build", "-j#{ENV.make_jobs}"
+              system "make", "-C", "build", "install"
+            end
+
+            test do
+              assert_match "remedy #{version}", shell_output("#{bin}/remedy --version")
+              pipe_output("#{bin}/remedy --diagnose", "# Hello World", 0)
+            end
+          end
+          RUBY
+          )
+
+          # Get current file SHA (required by GitHub API for updates)
+          FILE_SHA=$(curl -s \
+            -H "Authorization: token ${TAP_TOKEN}" \
+            "https://api.github.com/repos/KerseyFabrications/homebrew-tap/contents/Formula/remedy.rb" \
+            | jq -r '.sha')
+
+          # Update formula via GitHub API
+          CONTENT=$(echo "$FORMULA" | base64 -w 0)
+          curl -s -X PUT \
+            -H "Authorization: token ${TAP_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/KerseyFabrications/homebrew-tap/contents/Formula/remedy.rb" \
+            -d "{
+              \"message\": \"Update remedy to ${VERSION}\",
+              \"content\": \"${CONTENT}\",
+              \"sha\": \"${FILE_SHA}\"
+            }"
