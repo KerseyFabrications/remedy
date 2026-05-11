@@ -2,10 +2,10 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   build-linux:
@@ -31,6 +31,20 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
           make -C build -j$(nproc)
 
+      - name: Smoke test
+        run: |
+          # Binary runs and reports correct version
+          ./build/remedy --version
+
+          # Good markdown passes diagnosis
+          ./build/remedy --diagnose test.md
+
+          # Bad markdown fails diagnosis (exit 1)
+          ! ./build/remedy --diagnose test-bad.md
+
+          # Stdin pipe works
+          echo "# Hello" | ./build/remedy --diagnose
+
       - name: Build .deb package
         run: ./packaging/build-deb.sh
 
@@ -55,6 +69,13 @@ jobs:
           export PKG_CONFIG_PATH="${BREW_PREFIX}/opt/ncurses/lib/pkgconfig:${BREW_PREFIX}/opt/cmark-gfm/lib/pkgconfig"
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           make -C build -j$(sysctl -n hw.logicalcpu)
+
+      - name: Smoke test
+        run: |
+          ./build/remedy --version
+          ./build/remedy --diagnose test.md
+          ! ./build/remedy --diagnose test-bad.md
+          echo "# Hello" | ./build/remedy --diagnose
 
       - name: Package binary
         run: |
