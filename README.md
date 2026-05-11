@@ -21,36 +21,37 @@ remedy renders Markdown with full formatting — headings, bold, italic, code bl
 
 ## Install
 
-### From source
-
-```sh
-# Dependencies (Debian/Ubuntu)
-sudo apt install cmake pkg-config gcc libcmark-gfm-dev libcmark-gfm-extensions-dev libncurses-dev
-
-# Dependencies (macOS)
-brew install cmake pkg-config cmark-gfm ncurses
-
-# Build
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-make -C build -j$(nproc)
-
-# Install (optional)
-sudo cmake --install build
-```
-
-### Homebrew (macOS)
+### macOS (Homebrew)
 
 ```sh
 brew tap KerseyFabrications/tap
 brew install remedy
 ```
 
-### From .deb package
+### Debian / Ubuntu (amd64, arm64)
 
-Pre-built `.deb` packages for amd64 and arm64 are available on the [Releases](https://github.com/KerseyFabrications/remedy/releases) page.
+Download the `.deb` from the [latest release](https://github.com/KerseyFabrications/remedy/releases/latest):
 
 ```sh
 sudo dpkg -i remedy_*.deb
+```
+
+### From source
+
+Works on any system with a C11 compiler, CMake, ncurses, and cmark-gfm.
+
+```sh
+# Debian/Ubuntu
+sudo apt install cmake pkg-config gcc \
+  libcmark-gfm-dev libcmark-gfm-extensions-dev libncurses-dev
+
+# macOS
+brew install cmake pkg-config cmark-gfm ncurses
+
+# Build and install
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+make -C build -j$(nproc)
+sudo cmake --install build
 ```
 
 ## Usage
